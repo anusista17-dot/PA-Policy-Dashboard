@@ -1,6 +1,12 @@
 """
-Payer Policy Intelligence — Executive Dashboard
-H1'26 Hackathon | Designed in the ZS Associates analytical-product aesthetic
+Payer Policy Intelligence — Executive Dashboard (v3)
+H1'26 Hackathon | ZS Associates analytical-product aesthetic
+
+Design priorities (v3):
+- Chart-forward (text is supporting, not the body)
+- Interactive: clicks/selections cross-filter
+- Narrative arc: Overview → Diagnosis → Brand → Policy → Compare → Audit
+- Information density without clutter
 
 Run:
     pip install -r requirements.txt
@@ -8,7 +14,6 @@ Run:
 """
 
 import io
-import re
 import pathlib
 from typing import Optional
 
@@ -29,344 +34,236 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ============================================================
+# DESIGN TOKENS
+# ============================================================
+ZS_ORANGE = "#FF6B35"
+ZS_NAVY = "#1F4E79"
+COLOR_CRITICAL = "#B92434"
+COLOR_WARNING = "#D97706"
+COLOR_MONITOR = "#6B7280"
+COLOR_SUCCESS = "#059669"
+GRAY_BG = "#F9FAFB"
+GRAY_BORDER = "#E5E7EB"
+TEXT_DARK = "#111827"
+TEXT_MUTED = "#6B7280"
+
+BRAND_PALETTE = ["#FF6B35", "#1F4E79", "#059669", "#D97706", "#7C3AED",
+                 "#0EA5E9", "#B92434", "#65A30D", "#DB2777", "#0891B2",
+                 "#9333EA", "#CA8A04", "#1E3A8A", "#16A34A", "#DC2626"]
+
 
 # ============================================================
-# ZS DESIGN SYSTEM — CSS
+# GLOBAL CSS
 # ============================================================
-ZS_CSS = """
+CSS = """
 <style>
-    /* === Type system === */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Source+Serif+Pro:wght@600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+Pro:wght@600;700&display=swap');
 
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        color: #1A1A1A;
+        font-family: 'Inter', sans-serif !important;
+        color: #111827;
     }
-
-    /* === Layout === */
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 1400px;
-    }
-    [data-testid="stSidebar"] {
-        background: #FAFAFA;
-        border-right: 1px solid #E5E5E5;
-    }
-    [data-testid="stSidebar"] .block-container {
-        padding-top: 1.5rem !important;
-    }
-
-    /* === Hide Streamlit chrome === */
+    .block-container { padding: 1rem 1.5rem 3rem 1.5rem !important; max-width: 1500px; }
+    [data-testid="stSidebar"] { background: #F9FAFB; border-right: 1px solid #E5E7EB; }
+    [data-testid="stSidebar"] .block-container { padding-top: 1.2rem !important; }
     #MainMenu, footer, header { visibility: hidden; }
 
-    /* === Headlines === */
-    h1, h2, h3 {
-        font-family: 'Source Serif Pro', 'Inter', serif !important;
-        color: #1A1A1A;
-        letter-spacing: -0.01em;
-    }
-    h1 { font-weight: 700; font-size: 2.1rem !important; line-height: 1.2; }
-    h2 { font-weight: 600; font-size: 1.45rem !important; margin-top: 1.5rem !important; }
-    h3 { font-weight: 600; font-size: 1.15rem !important; }
+    h1 { font-family: 'Source Serif Pro', serif !important; font-weight: 700; font-size: 1.7rem !important;
+         color: #111827; letter-spacing: -0.01em; margin-bottom: 0 !important; }
+    h2 { font-family: 'Source Serif Pro', serif !important; font-weight: 600; font-size: 1.15rem !important;
+         color: #111827; margin: 1rem 0 0.5rem 0 !important; letter-spacing: -0.005em; }
+    h3 { font-family: 'Inter', sans-serif !important; font-weight: 600; font-size: 0.85rem !important;
+         text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280 !important; margin: 0.8rem 0 0.3rem 0 !important; }
 
-    /* === Insight-led title pattern === */
-    .insight-title {
+    /* Insight headline (top of page) */
+    .headline {
         font-family: 'Source Serif Pro', serif;
-        font-size: 1.5rem;
+        font-size: 1.4rem;
         line-height: 1.3;
-        color: #1A1A1A;
-        margin-bottom: 0.5rem;
+        color: #111827;
+        margin: 0.2rem 0 1rem 0;
         font-weight: 600;
     }
-    .insight-title .category {
-        color: #FF6B35;
-        font-weight: 700;
-    }
-    .insight-title .pipe {
-        color: #999;
-        margin: 0 0.4rem;
-        font-weight: 300;
-    }
+    .headline .pre { color: #FF6B35; font-weight: 700; }
+    .headline .pipe { color: #D1D5DB; margin: 0 0.4rem; font-weight: 300; }
 
-    /* === KPI cards === */
-    .kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1rem;
-        margin: 1rem 0 2rem 0;
-    }
-    .kpi-card {
+    /* KPI strip — compact horizontal */
+    .kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; margin: 0.5rem 0 1.2rem 0; }
+    .kpi-tile {
         background: #FFFFFF;
-        border: 1px solid #E5E5E5;
-        border-radius: 6px;
-        padding: 1.1rem 1.25rem;
-        position: relative;
+        border: 1px solid #E5E7EB;
+        border-radius: 4px;
+        padding: 0.6rem 0.8rem;
+        line-height: 1.1;
     }
-    .kpi-card.accent { border-left: 3px solid #FF6B35; }
-    .kpi-label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-        color: #6B6B6B;
-        font-weight: 600;
-        margin-bottom: 0.4rem;
-    }
-    .kpi-value {
-        font-size: 2.1rem;
-        font-weight: 700;
-        color: #1A1A1A;
-        line-height: 1;
-    }
-    .kpi-delta {
-        font-size: 0.85rem;
-        margin-top: 0.4rem;
-        color: #6B6B6B;
-    }
-    .kpi-delta.neg { color: #DC3545; }
-    .kpi-delta.pos { color: #28A745; }
-    .kpi-sub { font-size: 0.85rem; color: #6B6B6B; margin-top: 0.4rem; }
+    .kpi-tile.accent { border-top: 2px solid #FF6B35; }
+    .kpi-tile.critical { border-top: 2px solid #B92434; }
+    .kpi-tile.success { border-top: 2px solid #059669; }
+    .kpi-tile.warning { border-top: 2px solid #D97706; }
+    .kpi-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6B7280; font-weight: 600; }
+    .kpi-value { font-size: 1.55rem; font-weight: 700; color: #111827; margin-top: 0.15rem; }
+    .kpi-delta { font-size: 0.72rem; margin-top: 0.1rem; }
+    .kpi-delta.neg { color: #B92434; }
+    .kpi-delta.pos { color: #059669; }
+    .kpi-delta.neutral { color: #6B7280; }
 
-    /* === Severity / confidence badges === */
+    /* Chart card frame */
+    .chart-card {
+        background: #FFFFFF;
+        border: 1px solid #E5E7EB;
+        border-radius: 4px;
+        padding: 0.75rem 1rem 0.5rem 1rem;
+        margin-bottom: 0.6rem;
+    }
+    .chart-title { font-size: 0.9rem; font-weight: 600; color: #111827; margin-bottom: 0.1rem; }
+    .chart-sub { font-size: 0.75rem; color: #6B7280; margin-bottom: 0.4rem; }
+
+    /* Insight callout (one-line, tight) */
+    .callout {
+        background: #FFF8F2;
+        border-left: 3px solid #FF6B35;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.85rem;
+        color: #1F2937;
+        border-radius: 0 3px 3px 0;
+        margin: 0.4rem 0 0.7rem 0;
+    }
+    .callout strong { color: #FF6B35; }
+
+    /* Footnote */
+    .footnote {
+        font-size: 0.7rem;
+        color: #9CA3AF;
+        border-top: 1px solid #E5E7EB;
+        padding-top: 0.4rem;
+        margin-top: 0.8rem;
+        font-style: italic;
+    }
+
+    /* Badge */
     .badge {
         display: inline-block;
-        padding: 0.18rem 0.55rem;
-        border-radius: 4px;
-        font-size: 0.72rem;
+        padding: 0.13rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.7rem;
         font-weight: 600;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        margin-right: 0.4rem;
         border: 1px solid transparent;
     }
-    .badge-critical {
-        background: #FBEAEC;
-        color: #B92434;
-        border-color: #F1B8BF;
-    }
-    .badge-warning {
-        background: #FFF4E0;
-        color: #C77700;
-        border-color: #FFD89A;
-    }
-    .badge-monitor {
-        background: #F0F0F0;
-        color: #4A4A4A;
-        border-color: #D5D5D5;
-    }
-    .badge-success {
-        background: #E5F3E9;
-        color: #1E7A35;
-        border-color: #B8DEC2;
-    }
-    .badge-info {
-        background: #E8F0F8;
-        color: #2356A3;
-        border-color: #C3D8EE;
-    }
-    .badge-confidence-high { background: #E5F3E9; color: #1E7A35; }
-    .badge-confidence-medium { background: #FFF4E0; color: #C77700; }
-    .badge-confidence-low { background: #F0F0F0; color: #4A4A4A; }
+    .badge-critical { background:#FBEAEC; color:#B92434; border-color:#F1B8BF; }
+    .badge-warning { background:#FEF3C7; color:#92400E; border-color:#FDE68A; }
+    .badge-monitor { background:#F3F4F6; color:#4B5563; border-color:#D1D5DB; }
+    .badge-success { background:#D1FAE5; color:#065F46; border-color:#A7F3D0; }
 
-    /* === Insight card (AOI prototype-style) === */
-    .insight-card {
-        background: #FFFFFF;
-        border: 1px solid #E5E5E5;
-        border-left: 3px solid #999;
-        border-radius: 6px;
-        padding: 1rem 1.25rem;
-        margin-bottom: 0.75rem;
-    }
-    .insight-card.critical { border-left-color: #DC3545; }
-    .insight-card.warning { border-left-color: #FFA500; }
-    .insight-card.monitor { border-left-color: #4A4A4A; }
-    .insight-card.success { border-left-color: #28A745; }
-    .insight-card-meta {
-        display: flex; align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-        font-size: 0.8rem; color: #6B6B6B;
-    }
-    .insight-card-headline {
-        font-weight: 600;
-        font-size: 1.02rem;
-        color: #1A1A1A;
-        line-height: 1.4;
-        margin-bottom: 0.3rem;
-    }
-    .insight-card-body {
-        font-size: 0.88rem;
-        color: #4A4A4A;
-        line-height: 1.5;
-    }
-
-    /* === Severity section header === */
-    .severity-section {
-        font-size: 0.85rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        padding: 0.5rem 0;
-        margin-top: 1rem;
-        margin-bottom: 0.5rem;
-        border-bottom: 1px solid #E5E5E5;
-    }
-    .severity-section.critical { color: #B92434; }
-    .severity-section.warning { color: #C77700; }
-    .severity-section.monitor { color: #4A4A4A; }
-    .severity-section.success { color: #1E7A35; }
-
-    /* === Footer callout bar (ZS pattern) === */
-    .footer-callout {
-        background: #2A2A2A;
-        color: #FFFFFF;
-        padding: 1rem 1.5rem;
-        border-radius: 4px;
-        margin: 1.5rem 0;
-        text-align: center;
-        font-weight: 500;
-        font-size: 0.95rem;
-    }
-    .footer-callout .highlight {
-        color: #FFB380;
-        font-weight: 600;
-    }
-
-    /* === Sub-callout / insight box === */
-    .insight-box {
-        background: #FFF8F2;
-        border-left: 3px solid #FF6B35;
-        padding: 0.85rem 1.1rem;
-        margin: 1rem 0;
-        font-size: 0.92rem;
-        color: #4A4A4A;
-        border-radius: 0 4px 4px 0;
-    }
-    .insight-box strong { color: #1A1A1A; }
-
-    /* === Data table polish === */
-    .stDataFrame {
-        border: 1px solid #E5E5E5;
-        border-radius: 4px;
-    }
-
-    /* === Source/footnote line === */
-    .footnote {
-        font-size: 0.72rem;
-        color: #999;
-        margin-top: 1rem;
-        font-style: italic;
-        border-top: 1px solid #E5E5E5;
-        padding-top: 0.5rem;
-    }
-
-    /* === Tabs === */
-    [data-baseweb="tab-list"] {
-        gap: 0;
-        border-bottom: 1px solid #E5E5E5;
-    }
-    [data-baseweb="tab"] {
-        padding: 0.6rem 1.25rem !important;
-        font-weight: 500 !important;
-        color: #6B6B6B !important;
-        border-bottom: 2px solid transparent !important;
-    }
+    /* Tabs */
+    [data-baseweb="tab-list"] { gap:0; border-bottom:1px solid #E5E7EB; margin-bottom:0.5rem; }
+    [data-baseweb="tab"] { padding:0.5rem 1rem !important; font-weight:500 !important;
+                           color:#6B7280 !important; border-bottom:2px solid transparent !important; font-size:0.92rem !important; }
     [data-baseweb="tab"][aria-selected="true"] {
-        color: #FF6B35 !important;
-        border-bottom-color: #FF6B35 !important;
+        color:#FF6B35 !important; border-bottom-color:#FF6B35 !important; font-weight:600 !important;
     }
 
-    /* === Metric overrides === */
-    [data-testid="stMetricValue"] { font-size: 1.9rem; font-weight: 700; color: #1A1A1A; }
-    [data-testid="stMetricLabel"] { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: #6B6B6B; font-weight: 600; }
-    [data-testid="stMetricDelta"] { font-size: 0.8rem; }
+    /* Streamlit metric overrides */
+    [data-testid="stMetricValue"] { font-size: 1.55rem; font-weight: 700; color: #111827; }
+    [data-testid="stMetricLabel"] { font-size: 0.68rem; text-transform: uppercase; letter-spacing:0.06em; color:#6B7280; font-weight:600; }
+    [data-testid="stMetricDelta"] { font-size: 0.72rem; }
 
-    /* === Sidebar polish === */
-    [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.78rem !important;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #6B6B6B !important;
-        font-weight: 600;
-        margin-top: 1rem !important;
+    /* Sidebar */
+    [data-testid="stSidebar"] h3 { font-size:0.7rem !important; text-transform:uppercase; letter-spacing:0.08em;
+                                    color:#6B7280 !important; font-weight:600; margin-top:0.8rem !important; }
+    [data-testid="stSidebar"] .stMultiSelect [data-baseweb="tag"] {
+        background: #FF6B35 !important;
     }
 
-    /* === Buttons === */
-    .stButton button {
-        background: #FF6B35;
-        color: white;
-        border: none;
-        font-weight: 500;
+    /* Buttons */
+    .stDownloadButton button, .stButton button {
+        background: #FF6B35; color: white; border: none; font-weight: 500; font-size: 0.85rem;
     }
-    .stButton button:hover {
-        background: #E55A24;
-    }
+    .stDownloadButton button:hover, .stButton button:hover { background: #E55A24; }
+
+    /* Selectbox / multiselect compact */
+    [data-baseweb="select"] { font-size: 0.9rem; }
+
+    /* Plotly modebar — hide */
+    .js-plotly-plot .plotly .modebar { display: none !important; }
 </style>
 """
-st.markdown(ZS_CSS, unsafe_allow_html=True)
+st.markdown(CSS, unsafe_allow_html=True)
 
 
 # ============================================================
-# DATA LOADING
+# COMMON CHART STYLE
+# ============================================================
+def style_fig(fig, height=300, showlegend=False):
+    fig.update_layout(
+        height=height,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Inter, sans-serif", size=11, color=TEXT_DARK),
+        margin=dict(t=10, b=30, l=10, r=10),
+        showlegend=showlegend,
+        legend=dict(orientation="h", y=-0.18, font=dict(size=10)) if showlegend else None,
+        hoverlabel=dict(bgcolor="white", font=dict(family="Inter", size=11), bordercolor="#E5E7EB"),
+    )
+    fig.update_xaxes(gridcolor="#F3F4F6", zerolinecolor="#E5E7EB", linecolor="#E5E7EB",
+                     tickfont=dict(size=10, color=TEXT_MUTED), title_font=dict(size=10, color=TEXT_MUTED))
+    fig.update_yaxes(gridcolor="#F3F4F6", zerolinecolor="#E5E7EB", linecolor="#E5E7EB",
+                     tickfont=dict(size=10, color=TEXT_MUTED), title_font=dict(size=10, color=TEXT_MUTED))
+    return fig
+
+
+# ============================================================
+# DATA LOAD + ENRICH
 # ============================================================
 @st.cache_data
-def load_data_from_bytes(content: bytes) -> pd.DataFrame:
+def load_csv(content: bytes) -> pd.DataFrame:
     df = pd.read_csv(io.BytesIO(content), keep_default_na=False, na_values=[""])
     if "Access Score" in df.columns:
         df["Access Score"] = pd.to_numeric(df["Access Score"], errors="coerce").fillna(50).astype(int)
-    return _enrich(df)
-
+    return enrich(df)
 
 @st.cache_data
-def load_data_from_path(path: str) -> pd.DataFrame:
+def load_path(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, keep_default_na=False, na_values=[""])
     if "Access Score" in df.columns:
         df["Access Score"] = pd.to_numeric(df["Access Score"], errors="coerce").fillna(50).astype(int)
-    return _enrich(df)
+    return enrich(df)
 
 
-def _enrich(df: pd.DataFrame) -> pd.DataFrame:
-    """Add derived columns: severity, payer display name, restrictiveness count."""
+def to_int(v, d=0):
+    try: return int(str(v).strip())
+    except: return d
+
+
+def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["Policy ID"] = df["Filename"].str.replace(".pdf", "", regex=False)
-    # Generate a display label like "Policy 01 — Tremfya (Payer 330109)"
-    df["Display Name"] = df.apply(
-        lambda r: f"{r['Brand'].title()} · {r['Filename'].split('-')[0]}", axis=1
+    df["Display Name"] = df.apply(lambda r: f"{r['Brand'].title()} · {r['Filename'].split('-')[0]}", axis=1)
+    df["Severity"] = df["Access Score"].apply(
+        lambda s: "critical" if s < 38 else ("warning" if s < 50 else ("monitor" if s < 62 else "success"))
     )
-    df["Severity"] = df["Access Score"].apply(_severity_from_score)
+    df["Severity Label"] = df["Severity"].map({
+        "critical": "Restricted",
+        "warning": "Guarded",
+        "monitor": "At parity",
+        "success": "Preferred"
+    })
+    # Restrictiveness signals
+    df["_brand_steps"] = df["Number of Steps through Brands"].apply(lambda v: to_int(v, 0))
+    df["_generic_steps"] = df["Number of Steps through Generic"].apply(lambda v: to_int(v, 0))
+    df["_phototherapy"] = (df["Step through-Phototherapy"] == "Yes").astype(int)
+    df["_tb"] = (df["TB Test required"] == "Yes").astype(int)
+    df["_specialist"] = (~df["Specialist Types"].isin(["NA", "No", ""])).astype(int)
+    df["_qty"] = (~df["Quantity Limits"].isin(["NA", "No", ""])).astype(int)
+    df["Restriction Score"] = (
+        df["_brand_steps"] + df["_generic_steps"] +
+        df["_phototherapy"] + df["_tb"] + df["_specialist"] + df["_qty"]
+    )
+    df["Initial Auth (mo)"] = df["Initial Authorization Duration(in-months)"].apply(lambda v: to_int(v, 0))
+    df["Reauth (mo)"] = df["Reauthorization Duration(in-months)"].apply(lambda v: to_int(v, 0))
     return df
-
-
-def _severity_from_score(score: float) -> str:
-    if score < 38: return "critical"
-    if score < 50: return "warning"
-    if score < 62: return "monitor"
-    return "success"
-
-
-def _severity_label(sev: str) -> str:
-    return {"critical": "RESTRICTED", "warning": "GUARDED",
-            "monitor": "AT PARITY", "success": "PREFERRED"}.get(sev, "")
-
-
-def to_int(v, default: int = 0) -> int:
-    try: return int(str(v).strip())
-    except Exception: return default
-
-
-def restrictiveness_signals(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    out["Brand Steps"] = out["Number of Steps through Brands"].map(lambda v: to_int(v, 0))
-    out["Generic Steps"] = out["Number of Steps through Generic"].map(lambda v: to_int(v, 0))
-    out["Phototherapy"] = (out["Step through-Phototherapy"] == "Yes").astype(int)
-    out["TB Test"] = (out["TB Test required"] == "Yes").astype(int)
-    out["Specialist Required"] = (~out["Specialist Types"].isin(["NA", "No", ""])).astype(int)
-    out["Total Restrictions"] = (
-        out["Brand Steps"] + out["Generic Steps"] +
-        out["Phototherapy"] + out["TB Test"] + out["Specialist Required"]
-    )
-    return out
 
 
 # ============================================================
@@ -374,80 +271,69 @@ def restrictiveness_signals(df: pd.DataFrame) -> pd.DataFrame:
 # ============================================================
 with st.sidebar:
     st.markdown("""
-    <div style='padding: 0 0 1.2rem 0; border-bottom: 1px solid #E5E5E5;'>
-        <div style='font-family: "Source Serif Pro", serif; font-size: 1.4rem; font-weight: 700; color: #1A1A1A; line-height: 1.2;'>
+    <div style='padding:0 0 0.9rem 0; border-bottom:1px solid #E5E7EB;'>
+        <div style='font-family:"Source Serif Pro",serif; font-size:1.2rem; font-weight:700; color:#111827; line-height:1.2;'>
             Payer Policy<br/>Intelligence
         </div>
-        <div style='font-size: 0.78rem; color: #6B6B6B; margin-top: 0.3rem;'>
-            Access quality monitoring for plaque-psoriasis biologics
+        <div style='font-size:0.7rem; color:#6B7280; margin-top:0.25rem;'>
+            Access quality across US Prior Authorization policies
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("### Data Source")
+    st.markdown("### Data")
     uploaded = st.file_uploader("Upload `result.csv`", type=["csv"], label_visibility="collapsed")
-    df: Optional[pd.DataFrame] = None
 
+    df: Optional[pd.DataFrame] = None
     if uploaded is not None:
-        df = load_data_from_bytes(uploaded.getvalue())
+        df = load_csv(uploaded.getvalue())
     else:
         for p in ["result.csv", "outputs/result.csv"]:
             if pathlib.Path(p).exists():
-                df = load_data_from_path(p)
+                df = load_path(p)
                 break
 
     if df is None:
-        st.warning("Upload a `result.csv` to begin.")
+        st.warning("Upload `result.csv` to begin.")
         st.stop()
 
-    st.caption(f"**{len(df)}** rows loaded · {df['Brand'].nunique()} brands · {df['Filename'].nunique()} unique policies")
+    st.caption(f"**{len(df)}** rows · {df['Brand'].nunique()} brands · {df['Filename'].nunique()} policies")
 
     st.markdown("### Filters")
-    all_brands = sorted(df["Brand"].dropna().unique())
-    brands_sel = st.multiselect("Brand", all_brands, default=all_brands, label_visibility="collapsed")
-    score_range = st.slider("Access Score range", 0, 100,
-                            (int(df["Access Score"].min()), int(df["Access Score"].max())))
-
-    severity_filter = st.multiselect(
-        "Severity",
-        ["critical", "warning", "monitor", "success"],
-        default=["critical", "warning", "monitor", "success"],
-        format_func=lambda s: {"critical": "🔴 Restricted",
-                              "warning": "🟠 Guarded",
-                              "monitor": "⚪ At parity",
-                              "success": "🟢 Preferred"}.get(s, s),
+    all_brands = sorted(df["Brand"].unique())
+    f_brands = st.multiselect("Brand", all_brands, default=all_brands, label_visibility="collapsed")
+    f_score = st.slider("Access Score", 0, 100,
+                        (int(df["Access Score"].min()), int(df["Access Score"].max())))
+    f_severity = st.multiselect(
+        "Severity tier",
+        ["critical","warning","monitor","success"],
+        default=["critical","warning","monitor","success"],
+        format_func=lambda s: {"critical":"Restricted","warning":"Guarded",
+                              "monitor":"At parity","success":"Preferred"}[s],
     )
 
-    df_view = df[
-        df["Brand"].isin(brands_sel)
-        & df["Access Score"].between(*score_range)
-        & df["Severity"].isin(severity_filter)
-    ].copy()
-
-    st.caption(f"`{len(df_view)} of {len(df)} rows match filters`")
-
-    st.markdown("---")
-    st.markdown("### About")
-    st.caption("Built for the H1'26 hackathon. Pipeline: PDF → Gemini 2.5 Flash → deterministic Access Score (0–100). "
-               "Every claim is evidence-grounded and auditable.")
+    dfv = df[df["Brand"].isin(f_brands)
+             & df["Access Score"].between(*f_score)
+             & df["Severity"].isin(f_severity)].copy()
+    st.caption(f"`{len(dfv)} of {len(df)} match`")
 
 
 # ============================================================
 # HEADER
 # ============================================================
-n_critical = (df_view["Severity"] == "critical").sum()
-n_warning = (df_view["Severity"] == "warning").sum()
-n_monitor = (df_view["Severity"] == "monitor").sum()
-n_success = (df_view["Severity"] == "success").sum()
-avg_score = df_view["Access Score"].mean() if len(df_view) else 0
+n_critical = (dfv["Severity"] == "critical").sum()
+n_warning = (dfv["Severity"] == "warning").sum()
+n_monitor = (dfv["Severity"] == "monitor").sum()
+n_success = (dfv["Severity"] == "success").sum()
+avg_score = dfv["Access Score"].mean() if len(dfv) else 0
 parity_delta = avg_score - 50
 
 st.markdown(f"""
-<div class='insight-title'>
-    <span class='category'>Executive view</span>
+<div class='headline'>
+    <span class='pre'>Payer Policy Intelligence</span>
     <span class='pipe'>|</span>
-    {len(df_view)} payer policies analyzed across {df_view['Brand'].nunique()} brands;
-    average access is <strong>{abs(parity_delta):.1f} points {'below' if parity_delta < 0 else 'above'} FDA parity</strong>
+    {len(dfv)} policies · {dfv['Brand'].nunique()} brands ·
+    {avg_score:.1f} avg access ({abs(parity_delta):.1f} {'below' if parity_delta<0 else 'above'} FDA parity)
 </div>
 """, unsafe_allow_html=True)
 
@@ -455,498 +341,734 @@ st.markdown(f"""
 # ============================================================
 # TABS
 # ============================================================
-tab_exec, tab_explore, tab_detail, tab_compare, tab_data, tab_method = st.tabs([
-    "Executive Summary", "Policy Explorer", "Policy Detail",
-    "Side-by-Side Compare", "Raw Data", "Methodology"
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Overview",
+    "Restriction Diagnostic",
+    "Brand Benchmarking",
+    "Policy Inspector",
+    "Comparative Analysis",
+    "Methodology"
 ])
 
 
 # ----------------------------------------------------------------
-# TAB 1: EXECUTIVE SUMMARY
+# TAB 1 — OVERVIEW (dashboard grid)
 # ----------------------------------------------------------------
-with tab_exec:
-    # KPI ROW
+with tab1:
+    # KPI STRIP
+    pct_restricted = 100 * n_critical / max(1, len(dfv))
+    pct_preferred = 100 * n_success / max(1, len(dfv))
     st.markdown(f"""
-    <div class='kpi-grid'>
-        <div class='kpi-card accent'>
+    <div class='kpi-strip'>
+        <div class='kpi-tile accent'>
             <div class='kpi-label'>Policies analyzed</div>
-            <div class='kpi-value'>{len(df_view)}</div>
-            <div class='kpi-sub'>{df_view['Filename'].nunique()} unique payer documents</div>
+            <div class='kpi-value'>{len(dfv)}</div>
+            <div class='kpi-delta neutral'>{dfv['Filename'].nunique()} unique documents</div>
         </div>
-        <div class='kpi-card'>
+        <div class='kpi-tile'>
             <div class='kpi-label'>Average access score</div>
             <div class='kpi-value'>{avg_score:.1f}</div>
-            <div class='kpi-delta {"neg" if parity_delta < 0 else "pos"}'>
-                {'↓' if parity_delta < 0 else '↑'} {abs(parity_delta):.1f} vs FDA parity (50)
+            <div class='kpi-delta {"neg" if parity_delta<0 else "pos"}'>
+                {'↓' if parity_delta<0 else '↑'} {abs(parity_delta):.1f} vs parity
             </div>
         </div>
-        <div class='kpi-card'>
-            <div class='kpi-label'>Restricted policies</div>
-            <div class='kpi-value' style='color: #B92434;'>{n_critical}</div>
-            <div class='kpi-sub'>{100*n_critical/max(1,len(df_view)):.0f}% of book — score &lt; 38</div>
+        <div class='kpi-tile critical'>
+            <div class='kpi-label'>Restricted</div>
+            <div class='kpi-value' style='color:#B92434;'>{n_critical}</div>
+            <div class='kpi-delta neg'>{pct_restricted:.0f}% of book</div>
         </div>
-        <div class='kpi-card'>
-            <div class='kpi-label'>Preferred policies</div>
-            <div class='kpi-value' style='color: #1E7A35;'>{n_success}</div>
-            <div class='kpi-sub'>{100*n_success/max(1,len(df_view)):.0f}% of book — score ≥ 62</div>
+        <div class='kpi-tile warning'>
+            <div class='kpi-label'>Guarded</div>
+            <div class='kpi-value' style='color:#D97706;'>{n_warning}</div>
+            <div class='kpi-delta neutral'>{100*n_warning/max(1,len(dfv)):.0f}% of book</div>
+        </div>
+        <div class='kpi-tile success'>
+            <div class='kpi-label'>Preferred</div>
+            <div class='kpi-value' style='color:#059669;'>{n_success}</div>
+            <div class='kpi-delta pos'>{pct_preferred:.0f}% of book</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # KEY FINDINGS (3 insight cards)
-    st.markdown("<h2>Key findings</h2>", unsafe_allow_html=True)
+    # CHART GRID 2x2
+    col_a, col_b = st.columns(2)
 
-    # Compute findings dynamically
-    brand_means = df_view.groupby("Brand")["Access Score"].agg(["mean","count"]).round(1)
-    brand_means = brand_means[brand_means["count"] >= 2].sort_values("mean")  # brands with >=2 policies
-    if len(brand_means):
-        worst_brand = brand_means.index[0]
-        best_brand = brand_means.index[-1]
-        gap = brand_means["mean"].iloc[-1] - brand_means["mean"].iloc[0]
-    else:
-        worst_brand, best_brand, gap = "—", "—", 0
-
-    sig = restrictiveness_signals(df_view)
-    tb_share = (sig["TB Test"] == 1).mean() * 100
-    photo_share = (sig["Phototherapy"] == 1).mean() * 100
-    step_burdened = (sig["Brand Steps"] + sig["Generic Steps"] >= 2).mean() * 100
-
-    findings_col1, findings_col2 = st.columns(2)
-    with findings_col1:
-        st.markdown(f"""
-        <div class='insight-card critical'>
-            <div class='insight-card-meta'>
-                <span class='badge badge-critical'>Finding 1</span>
-                <span>Brand-level gap</span>
-            </div>
-            <div class='insight-card-headline'>
-                {best_brand.title()} secures {gap:.1f}-point higher access than {worst_brand.title()} across the same payer mix
-            </div>
-            <div class='insight-card-body'>
-                Identical FDA indications, materially different payer treatment.
-                Negotiation leverage opportunity for the under-performing brand.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class='insight-card warning'>
-            <div class='insight-card-meta'>
-                <span class='badge badge-warning'>Finding 2</span>
-                <span>Step-therapy burden</span>
-            </div>
-            <div class='insight-card-headline'>
-                {step_burdened:.0f}% of policies require 2+ prior-therapy failures before approval
-            </div>
-            <div class='insight-card-body'>
-                The most common access friction. Each additional brand-step deducts ~5 points from
-                the policy's Access Score and adds weeks to time-to-therapy.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with findings_col2:
-        st.markdown(f"""
-        <div class='insight-card warning'>
-            <div class='insight-card-meta'>
-                <span class='badge badge-warning'>Finding 3</span>
-                <span>Clinical gating</span>
-            </div>
-            <div class='insight-card-headline'>
-                {tb_share:.0f}% of policies require TB testing; {photo_share:.0f}% require phototherapy step
-            </div>
-            <div class='insight-card-body'>
-                Standard but high-friction requirements. Reducing either could meaningfully
-                shift the access-score distribution upward.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Compute a top "preferred" payer for highlight
-        if n_success > 0:
-            preferred_examples = df_view[df_view["Severity"] == "success"].head(1)
-            example_brand = preferred_examples.iloc[0]["Brand"]
-            example_policy = preferred_examples.iloc[0]["Policy ID"]
-        else:
-            example_brand, example_policy = "—", "—"
-
-        st.markdown(f"""
-        <div class='insight-card success'>
-            <div class='insight-card-meta'>
-                <span class='badge badge-success'>Finding 4</span>
-                <span>Best-in-class access</span>
-            </div>
-            <div class='insight-card-headline'>
-                {n_success} policies score &ge; 62 — these are template wins to study for negotiation pattern
-            </div>
-            <div class='insight-card-body'>
-                Highest-access policies typically combine: no step therapy, 12-month authorization,
-                broad specialist eligibility, and absence of TB requirement.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # DISTRIBUTION CHART
-    st.markdown("<h2>Access score distribution by brand</h2>", unsafe_allow_html=True)
-
-    fig_dist = go.Figure()
-    brand_order = df_view.groupby("Brand")["Access Score"].mean().sort_values().index.tolist()
-    for brand in brand_order:
-        b_data = df_view[df_view["Brand"] == brand]["Access Score"]
-        fig_dist.add_trace(go.Box(
-            y=b_data, x=[brand] * len(b_data),
-            name=brand,
-            marker_color="#FF6B35",
-            line_color="#1A1A1A",
-            boxpoints="all", jitter=0.4, pointpos=0,
-            marker=dict(size=6, opacity=0.7, line=dict(width=1, color="#1A1A1A")),
-            showlegend=False,
+    # CHART 1 — Score distribution histogram
+    with col_a:
+        st.markdown("<div class='chart-title'>Access score distribution</div><div class='chart-sub'>Anchors: 38 (restricted) · 50 (FDA parity) · 62 (preferred)</div>", unsafe_allow_html=True)
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(
+            x=dfv["Access Score"], nbinsx=20,
+            marker=dict(color=ZS_ORANGE, line=dict(width=0)),
+            hovertemplate="Score range: %{x}<br>Policies: %{y}<extra></extra>",
         ))
-    fig_dist.add_hline(y=50, line_dash="dash", line_color="#6B6B6B", line_width=1.5,
-                       annotation_text="FDA parity (50)", annotation_position="right",
-                       annotation_font=dict(size=11, color="#6B6B6B"))
-    fig_dist.add_hrect(y0=0, y1=38, fillcolor="#FBEAEC", opacity=0.3, layer="below", line_width=0)
-    fig_dist.add_hrect(y0=62, y1=100, fillcolor="#E5F3E9", opacity=0.3, layer="below", line_width=0)
-    fig_dist.update_layout(
-        height=440,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        font=dict(family="Inter, sans-serif", size=12, color="#1A1A1A"),
-        yaxis=dict(title="Access Score", range=[0, 100],
-                  gridcolor="#F0F0F0", zerolinecolor="#E5E5E5"),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11)),
-        margin=dict(t=10, b=10, l=10, r=10),
-    )
-    st.plotly_chart(fig_dist, use_container_width=True, config={"displayModeBar": False})
+        fig.add_vrect(x0=0, x1=38, fillcolor=COLOR_CRITICAL, opacity=0.08, line_width=0, layer="below")
+        fig.add_vrect(x0=62, x1=100, fillcolor=COLOR_SUCCESS, opacity=0.08, line_width=0, layer="below")
+        fig.add_vline(x=50, line=dict(color=TEXT_MUTED, dash="dash", width=1.5))
+        fig.add_annotation(x=50, y=1, yref="paper", text="parity",
+                          showarrow=False, yshift=8, font=dict(size=10, color=TEXT_MUTED))
+        fig = style_fig(fig, height=280)
+        fig.update_xaxes(title=None, range=[0, 100])
+        fig.update_yaxes(title="Policies")
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.markdown("""
-    <div class='insight-box'>
-        <strong>Read:</strong> Green band = preferred access (score ≥ 62). Red band = restricted (&lt; 38).
-        Brands are ordered left-to-right by average access score, lowest first.
-        Each point is one (payer policy, brand) combination.
-    </div>
-    """, unsafe_allow_html=True)
+    # CHART 2 — Brand performance ranked
+    with col_b:
+        st.markdown("<div class='chart-title'>Brand performance ranking</div><div class='chart-sub'>Average access score by brand (lower = more restrictive)</div>", unsafe_allow_html=True)
+        brand_perf = (dfv.groupby("Brand", as_index=False)
+                       .agg(avg_score=("Access Score", "mean"),
+                            count=("Access Score", "size"))
+                       .sort_values("avg_score"))
+        # Color: red below parity, green above
+        brand_perf["color"] = brand_perf["avg_score"].apply(
+            lambda s: COLOR_CRITICAL if s < 38 else (COLOR_WARNING if s < 50 else (COLOR_MONITOR if s < 62 else COLOR_SUCCESS))
+        )
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=brand_perf["Brand"], x=brand_perf["avg_score"],
+            orientation="h",
+            marker=dict(color=brand_perf["color"]),
+            text=[f"{v:.0f}" for v in brand_perf["avg_score"]],
+            textposition="outside",
+            textfont=dict(size=10, color=TEXT_DARK),
+            customdata=brand_perf["count"],
+            hovertemplate="<b>%{y}</b><br>Avg score: %{x:.1f}<br>Policies: %{customdata}<extra></extra>",
+        ))
+        fig.add_vline(x=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
+        fig = style_fig(fig, height=max(220, 22 * len(brand_perf)))
+        fig.update_xaxes(title=None, range=[0, 100])
+        fig.update_yaxes(title=None, tickfont=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    # FOOTER CALLOUT
-    st.markdown(f"""
-    <div class='footer-callout'>
-        Of {len(df_view)} policies analyzed, <span class='highlight'>{n_critical + n_warning}</span> show access friction below FDA parity
-        — concentrated in step therapy, TB testing, and specialist gating. The pipeline surfaces these systematically;
-        the patterns above are the levers to negotiate against.
-    </div>
-    """, unsafe_allow_html=True)
+    col_c, col_d = st.columns(2)
 
-    # FOOTNOTE
-    st.markdown(f"""
-    <div class='footnote'>
-        Source: 70 publicly available US payer Prior Authorization PDFs, extracted via Gemini 2.5 Flash with
-        Pydantic schema enforcement. Access Score is computed by a deterministic rules-based formula (0–100),
-        calibrated against the problem-statement anchors. n={len(df_view)} (filename, brand) combinations.
-        Pipeline run: {pd.Timestamp.now().strftime('%Y-%m-%d')}.
-    </div>
-    """, unsafe_allow_html=True)
+    # CHART 3 — Severity donut
+    with col_c:
+        st.markdown("<div class='chart-title'>Severity composition</div><div class='chart-sub'>Distribution by access tier</div>", unsafe_allow_html=True)
+        sev_counts = pd.DataFrame({
+            "Severity": ["Restricted", "Guarded", "At parity", "Preferred"],
+            "Count": [n_critical, n_warning, n_monitor, n_success],
+            "Color": [COLOR_CRITICAL, COLOR_WARNING, COLOR_MONITOR, COLOR_SUCCESS],
+        })
+        sev_counts = sev_counts[sev_counts["Count"] > 0]
+        fig = go.Figure()
+        fig.add_trace(go.Pie(
+            labels=sev_counts["Severity"], values=sev_counts["Count"],
+            hole=0.6,
+            marker=dict(colors=sev_counts["Color"], line=dict(color="white", width=2)),
+            textinfo="label+percent",
+            textfont=dict(size=11, color="white", family="Inter"),
+            hovertemplate="<b>%{label}</b><br>Policies: %{value}<br>%{percent}<extra></extra>",
+        ))
+        fig.add_annotation(text=f"<b>{len(dfv)}</b><br><span style='font-size:0.7rem;color:#6B7280'>policies</span>",
+                          x=0.5, y=0.5, showarrow=False, font=dict(size=18, family="Inter", color=TEXT_DARK))
+        fig = style_fig(fig, height=280)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
+    # CHART 4 — Quadrant: restrictiveness vs score
+    with col_d:
+        st.markdown("<div class='chart-title'>Friction vs access matrix</div><div class='chart-sub'>Each dot = one policy. Lower-left = poor outcome (high friction, low access)</div>", unsafe_allow_html=True)
+        # Add small jitter so coincident points are visible
+        rng = np.random.default_rng(42)
+        x_jit = dfv["Restriction Score"] + rng.uniform(-0.18, 0.18, size=len(dfv))
+        y_jit = dfv["Access Score"] + rng.uniform(-0.7, 0.7, size=len(dfv))
+        # Build color map
+        all_brands_list = sorted(df["Brand"].unique())
+        cmap = {b: BRAND_PALETTE[i % len(BRAND_PALETTE)] for i, b in enumerate(all_brands_list)}
+        colors = dfv["Brand"].map(cmap)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=x_jit, y=y_jit, mode="markers",
+            marker=dict(size=9, color=colors, opacity=0.7, line=dict(width=1, color="white")),
+            customdata=np.stack([dfv["Brand"], dfv["Policy ID"], dfv["Access Score"]], axis=-1),
+            hovertemplate="<b>%{customdata[0]}</b><br>Policy: %{customdata[1]}<br>Access: %{customdata[2]}<br>Restrictions: %{x:.0f}<extra></extra>",
+        ))
+        fig.add_hline(y=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
+        fig.add_vline(x=dfv["Restriction Score"].median(), line=dict(color=TEXT_MUTED, dash="dot", width=1))
+        fig = style_fig(fig, height=280)
+        fig.update_xaxes(title="Restriction count (steps + TB + photo + specialist + qty)")
+        fig.update_yaxes(title="Access score", range=[0, 100])
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-# ----------------------------------------------------------------
-# TAB 2: POLICY EXPLORER (cards grouped by severity)
-# ----------------------------------------------------------------
-with tab_explore:
-    st.markdown(f"""
-    <div class='insight-title'>
-        <span class='category'>Policy explorer</span>
-        <span class='pipe'>|</span>
-        Browse all {len(df_view)} policies grouped by access severity
-    </div>
-    """, unsafe_allow_html=True)
-
-    severities = [("critical", "Restricted access (score < 38)", "Score below FDA parity by 12+ points"),
-                  ("warning",  "Guarded access (38–49)", "Below FDA parity"),
-                  ("monitor",  "At-parity access (50–61)", "Aligned with FDA label"),
-                  ("success",  "Preferred access (≥ 62)", "Above FDA parity")]
-
-    for sev_key, sev_label, sev_desc in severities:
-        sev_df = df_view[df_view["Severity"] == sev_key]
-        if not len(sev_df):
-            continue
+    # KEY INSIGHT
+    if len(dfv) > 0:
+        worst = dfv.loc[dfv["Access Score"].idxmin()]
+        best = dfv.loc[dfv["Access Score"].idxmax()]
+        score_range = best["Access Score"] - worst["Access Score"]
         st.markdown(f"""
-        <div class='severity-section {sev_key}'>
-            {sev_label} &nbsp;·&nbsp; <span style='color: #6B6B6B; font-weight: 500; text-transform: none; letter-spacing: 0;'>{sev_desc}</span> &nbsp;·&nbsp; <span style='color: #6B6B6B;'>{len(sev_df)} policies</span>
+        <div class='callout'>
+            <strong>Spread:</strong> {score_range}-point gap between most-restrictive ({worst['Brand']} · {worst['Policy ID']}, score {worst['Access Score']})
+            and most-preferred ({best['Brand']} · {best['Policy ID']}, score {best['Access Score']}) policy.
+            {n_critical + n_warning} of {len(dfv)} policies sit below FDA parity.
         </div>
         """, unsafe_allow_html=True)
 
-        # Render cards 2 per row
-        sev_df = sev_df.sort_values("Access Score", ascending=(sev_key in ["critical","warning"]))
-        for i in range(0, len(sev_df), 2):
-            cols = st.columns(2)
-            for j, col in enumerate(cols):
-                if i + j >= len(sev_df): break
-                row = sev_df.iloc[i + j]
-                # Build restrictions summary
-                rests = []
-                bs = to_int(row["Number of Steps through Brands"], 0)
-                gs = to_int(row["Number of Steps through Generic"], 0)
-                if bs > 0: rests.append(f"{bs} brand step{'s' if bs > 1 else ''}")
-                if gs > 0: rests.append(f"{gs} generic step{'s' if gs > 1 else ''}")
-                if row["TB Test required"] == "Yes": rests.append("TB test")
-                if row["Step through-Phototherapy"] == "Yes": rests.append("phototherapy")
-                rests_str = " · ".join(rests) if rests else "No major restrictions"
+    st.markdown(f"<div class='footnote'>n={len(dfv)} (filename, brand) combinations · Extraction: Gemini 2.5 Flash · Access Score: deterministic rules-based (0–100)</div>", unsafe_allow_html=True)
 
-                with col:
-                    st.markdown(f"""
-                    <div class='insight-card {sev_key}'>
-                        <div class='insight-card-meta'>
-                            <span class='badge badge-{sev_key}'>{_severity_label(sev_key)}</span>
-                            <span><strong>{row['Brand']}</strong></span>
-                            <span>· Score {row['Access Score']}</span>
-                        </div>
-                        <div class='insight-card-headline'>
-                            Payer policy {row['Policy ID']}
-                        </div>
-                        <div class='insight-card-body'>
-                            <strong>Restrictions:</strong> {rests_str}<br>
-                            <strong>Age eligibility:</strong> {row['Age']} ·
-                            <strong>Initial auth:</strong> {row['Initial Authorization Duration(in-months)']} months
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+
+# ----------------------------------------------------------------
+# TAB 2 — RESTRICTION DIAGNOSTIC
+# ----------------------------------------------------------------
+with tab2:
+    # KPI strip: prevalence of each restriction
+    tot = len(dfv)
+    pct_brand_steps = 100 * (dfv["_brand_steps"] > 0).sum() / max(1, tot)
+    pct_generic_steps = 100 * (dfv["_generic_steps"] > 0).sum() / max(1, tot)
+    pct_photo = 100 * (dfv["_phototherapy"] == 1).sum() / max(1, tot)
+    pct_tb = 100 * (dfv["_tb"] == 1).sum() / max(1, tot)
+    pct_specialist = 100 * (dfv["_specialist"] == 1).sum() / max(1, tot)
 
     st.markdown(f"""
-    <div class='footnote'>
-        Cards grouped by severity band. Within each band, sorted by Access Score
-        (lowest first for restricted/guarded, highest first for at-parity/preferred).
-        Switch to Policy Detail tab for evidence-grounded drill-down.
+    <div class='kpi-strip'>
+        <div class='kpi-tile'><div class='kpi-label'>Brand step therapy</div>
+            <div class='kpi-value'>{pct_brand_steps:.0f}%</div>
+            <div class='kpi-delta neutral'>of policies</div></div>
+        <div class='kpi-tile'><div class='kpi-label'>Generic step therapy</div>
+            <div class='kpi-value'>{pct_generic_steps:.0f}%</div>
+            <div class='kpi-delta neutral'>of policies</div></div>
+        <div class='kpi-tile'><div class='kpi-label'>Phototherapy step</div>
+            <div class='kpi-value'>{pct_photo:.0f}%</div>
+            <div class='kpi-delta neutral'>of policies</div></div>
+        <div class='kpi-tile'><div class='kpi-label'>TB testing</div>
+            <div class='kpi-value'>{pct_tb:.0f}%</div>
+            <div class='kpi-delta neutral'>of policies</div></div>
+        <div class='kpi-tile'><div class='kpi-label'>Specialist required</div>
+            <div class='kpi-value'>{pct_specialist:.0f}%</div>
+            <div class='kpi-delta neutral'>of policies</div></div>
     </div>
     """, unsafe_allow_html=True)
 
+    col_a, col_b = st.columns([5, 4])
+
+    # CHART 1 — Restriction prevalence horizontal bar
+    with col_a:
+        st.markdown("<div class='chart-title'>Restriction prevalence</div><div class='chart-sub'>Share of policies imposing each access gate</div>", unsafe_allow_html=True)
+        rest_data = pd.DataFrame({
+            "Restriction": ["Brand step therapy", "Generic step therapy", "Phototherapy step",
+                           "TB testing", "Specialist required", "Quantity limits"],
+            "Pct": [pct_brand_steps, pct_generic_steps, pct_photo, pct_tb, pct_specialist,
+                    100 * (dfv["_qty"] == 1).sum() / max(1, tot)],
+        }).sort_values("Pct", ascending=True)
+        rest_data["color"] = rest_data["Pct"].apply(
+            lambda p: COLOR_CRITICAL if p > 60 else (COLOR_WARNING if p > 30 else COLOR_MONITOR)
+        )
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=rest_data["Restriction"], x=rest_data["Pct"], orientation="h",
+            marker=dict(color=rest_data["color"]),
+            text=[f"{v:.0f}%" for v in rest_data["Pct"]],
+            textposition="outside",
+            textfont=dict(size=10, color=TEXT_DARK),
+            hovertemplate="<b>%{y}</b><br>%{x:.0f}% of policies<extra></extra>",
+        ))
+        fig = style_fig(fig, height=260)
+        fig.update_xaxes(title="% of policies", range=[0, 110])
+        fig.update_yaxes(title=None)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # CHART 2 — Heatmap: brand × restriction
+    with col_b:
+        st.markdown("<div class='chart-title'>Restriction heatmap by brand</div><div class='chart-sub'>% of brand's policies with each restriction</div>", unsafe_allow_html=True)
+        brand_x_rest = dfv.groupby("Brand").agg(
+            brand_step=("_brand_steps", lambda s: 100 * (s > 0).mean()),
+            generic_step=("_generic_steps", lambda s: 100 * (s > 0).mean()),
+            phototherapy=("_phototherapy", lambda s: 100 * s.mean()),
+            tb=("_tb", lambda s: 100 * s.mean()),
+            specialist=("_specialist", lambda s: 100 * s.mean()),
+        ).round(0)
+        brand_x_rest = brand_x_rest.sort_index()
+        fig = go.Figure()
+        fig.add_trace(go.Heatmap(
+            z=brand_x_rest.values,
+            x=["Brand step", "Generic step", "Photo", "TB", "Specialist"],
+            y=brand_x_rest.index,
+            colorscale=[[0, "#F9FAFB"], [0.5, "#FDB97A"], [1, COLOR_CRITICAL]],
+            zmin=0, zmax=100,
+            showscale=True,
+            colorbar=dict(thickness=10, tickfont=dict(size=9), title=None, len=0.6),
+            text=brand_x_rest.values.astype(int),
+            texttemplate="%{text}",
+            textfont=dict(size=9, family="Inter"),
+            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.0f}%<extra></extra>",
+        ))
+        fig = style_fig(fig, height=max(220, 18 * len(brand_x_rest)))
+        fig.update_xaxes(side="top", tickfont=dict(size=10))
+        fig.update_yaxes(tickfont=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # Bottom: top friction policies and stacked-bar
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        st.markdown("<div class='chart-title'>Most restrictive policies</div><div class='chart-sub'>Top 10 by restriction count</div>", unsafe_allow_html=True)
+        top_rest = dfv.nlargest(10, "Restriction Score")[["Policy ID", "Brand", "Restriction Score", "Access Score"]].copy()
+        top_rest["label"] = top_rest["Brand"].str.slice(0, 8) + " · " + top_rest["Policy ID"].str.slice(0, 12)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=top_rest["label"][::-1], x=top_rest["Restriction Score"][::-1],
+            orientation="h",
+            marker=dict(color=top_rest["Access Score"][::-1],
+                       colorscale=[[0, COLOR_CRITICAL], [0.5, COLOR_WARNING], [1, COLOR_SUCCESS]],
+                       cmin=0, cmax=100,
+                       showscale=False),
+            text=[f"{v:.0f}" for v in top_rest["Restriction Score"][::-1]],
+            textposition="outside",
+            textfont=dict(size=10, color=TEXT_DARK),
+            customdata=top_rest["Access Score"][::-1],
+            hovertemplate="<b>%{y}</b><br>Restrictions: %{x}<br>Access score: %{customdata}<extra></extra>",
+        ))
+        fig = style_fig(fig, height=320)
+        fig.update_xaxes(title="Restriction count")
+        fig.update_yaxes(title=None, tickfont=dict(size=9))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    with col_d:
+        st.markdown("<div class='chart-title'>Auth duration distribution</div><div class='chart-sub'>Initial vs reauthorization periods</div>", unsafe_allow_html=True)
+        ia = dfv["Initial Auth (mo)"].replace(0, np.nan).dropna()
+        rr = dfv["Reauth (mo)"].replace(0, np.nan).dropna()
+        fig = go.Figure()
+        if len(ia):
+            fig.add_trace(go.Histogram(x=ia, name="Initial",
+                                       marker=dict(color=ZS_ORANGE, opacity=0.75),
+                                       nbinsx=12,
+                                       hovertemplate="Initial: %{x} mo<br>%{y} policies<extra></extra>"))
+        if len(rr):
+            fig.add_trace(go.Histogram(x=rr, name="Reauth",
+                                       marker=dict(color=ZS_NAVY, opacity=0.75),
+                                       nbinsx=12,
+                                       hovertemplate="Reauth: %{x} mo<br>%{y} policies<extra></extra>"))
+        fig = style_fig(fig, height=320, showlegend=True)
+        fig.update_xaxes(title="Months")
+        fig.update_yaxes(title="Policies")
+        fig.update_layout(barmode="overlay")
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # CALLOUT
+    top_friction = rest_data.iloc[-1]
+    st.markdown(f"""
+    <div class='callout'>
+        <strong>Lead driver of friction:</strong> {top_friction['Restriction'].lower()} appears in {top_friction['Pct']:.0f}% of policies.
+        Reducing it would shift the score distribution upward by ~3-5 points per policy.
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='footnote'>Restriction count = brand steps + generic steps + (1 each for phototherapy, TB, specialist, quantity limits) · n={len(dfv)}</div>", unsafe_allow_html=True)
+
 
 # ----------------------------------------------------------------
-# TAB 3: POLICY DETAIL (AOI prototype-style drill-down)
+# TAB 3 — BRAND BENCHMARKING (interactive: pick a brand)
 # ----------------------------------------------------------------
-with tab_detail:
-    if not len(df_view):
-        st.info("No rows match the current filters.")
+with tab3:
+    brands_list = sorted(dfv["Brand"].unique())
+    if not brands_list:
+        st.info("No brands match the current filters.")
     else:
-        df_v = df_view.reset_index(drop=True).copy()
-        df_v["__key"] = df_v["Display Name"] + "  (" + df_v["Filename"] + ")"
-        sel = st.selectbox("Select a policy to inspect", options=df_v["__key"].tolist(), label_visibility="collapsed")
-        row = df_v[df_v["__key"] == sel].iloc[0]
+        # Brand selector at top
+        focus_brand = st.radio(
+            "Focus brand",
+            options=brands_list,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="brand_focus"
+        )
 
-        sev = row["Severity"]
-        sev_label = _severity_label(sev)
+        focus_df = dfv[dfv["Brand"] == focus_brand]
+        others_df = dfv[dfv["Brand"] != focus_brand]
 
-        # Dark header (AOI-style)
+        focus_avg = focus_df["Access Score"].mean() if len(focus_df) else 0
+        others_avg = others_df["Access Score"].mean() if len(others_df) else 0
+        delta_vs_market = focus_avg - others_avg
+
+        # KPI strip for focus brand
         st.markdown(f"""
-        <div style='background: #1F1F1F; border-radius: 6px; padding: 1.5rem 1.75rem; margin: 1rem 0;'>
-            <div style='display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem;'>
-                <span class='badge badge-{sev}'>{sev_label}</span>
-                <span style='color: #FF6B35; font-weight: 600; font-size: 0.85rem;'>{row['Brand']}</span>
-                <span style='color: #999; font-size: 0.8rem;'>·</span>
-                <span style='color: #999; font-size: 0.8rem;'>Payer policy {row['Policy ID']}</span>
+        <div class='kpi-strip'>
+            <div class='kpi-tile accent'>
+                <div class='kpi-label'>{focus_brand} policies</div>
+                <div class='kpi-value'>{len(focus_df)}</div>
+                <div class='kpi-delta neutral'>{focus_df['Filename'].nunique()} unique documents</div>
             </div>
-            <div style='font-family: "Source Serif Pro", serif; font-size: 1.4rem; color: #FFFFFF; font-weight: 600; line-height: 1.3; margin-bottom: 0.85rem;'>
-                Access Score <strong style='color: #FFB380;'>{row['Access Score']}</strong> ·
-                {abs(row['Access Score'] - 50)} points {"below" if row['Access Score'] < 50 else "above"} FDA parity
+            <div class='kpi-tile'>
+                <div class='kpi-label'>Avg access score</div>
+                <div class='kpi-value'>{focus_avg:.1f}</div>
+                <div class='kpi-delta {"pos" if delta_vs_market>=0 else "neg"}'>
+                    {'↑' if delta_vs_market>=0 else '↓'} {abs(delta_vs_market):.1f} vs other brands
+                </div>
             </div>
-            <div style='display: flex; gap: 0.5rem;'>
-                <span class='badge badge-confidence-high'>Deterministic score</span>
-                <span class='badge badge-info'>{row['Brand']} indication: PsO</span>
-                <span class='badge badge-monitor'>Source: PDF extraction</span>
+            <div class='kpi-tile'>
+                <div class='kpi-label'>vs FDA parity</div>
+                <div class='kpi-value'>{focus_avg-50:+.1f}</div>
+                <div class='kpi-delta {"pos" if focus_avg>=50 else "neg"}'>
+                    {'above' if focus_avg>=50 else 'below'} 50
+                </div>
+            </div>
+            <div class='kpi-tile critical'>
+                <div class='kpi-label'>Restricted</div>
+                <div class='kpi-value' style='color:#B92434;'>{(focus_df['Severity']=='critical').sum()}</div>
+                <div class='kpi-delta neg'>{100*(focus_df['Severity']=='critical').sum()/max(1,len(focus_df)):.0f}% of brand book</div>
+            </div>
+            <div class='kpi-tile success'>
+                <div class='kpi-label'>Preferred</div>
+                <div class='kpi-value' style='color:#059669;'>{(focus_df['Severity']=='success').sum()}</div>
+                <div class='kpi-delta pos'>{100*(focus_df['Severity']=='success').sum()/max(1,len(focus_df)):.0f}% of brand book</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Sub-tabs
-        sub_overview, sub_params, sub_score = st.tabs(["Overview", "All 12 parameters", "Score breakdown"])
+        # 2 columns of charts
+        col_a, col_b = st.columns(2)
 
-        with sub_overview:
-            c1, c2, c3 = st.columns(3)
-            brand_avg = df[df["Brand"] == row["Brand"]]["Access Score"].mean()
-            overall_avg = df["Access Score"].mean()
-            with c1:
-                st.metric("vs Brand average", f"{row['Access Score']}",
-                         f"{row['Access Score'] - brand_avg:+.1f} vs {brand_avg:.1f}")
-            with c2:
-                st.metric("vs Overall average", f"{row['Access Score']}",
-                         f"{row['Access Score'] - overall_avg:+.1f} vs {overall_avg:.1f}")
-            with c3:
-                pct = int(round((df[df["Brand"] == row["Brand"]]["Access Score"] <= row["Access Score"]).mean() * 100))
-                suffix = "th" if 11 <= (pct % 100) <= 13 else {1:"st",2:"nd",3:"rd"}.get(pct % 10, "th")
-                st.metric("Brand percentile", f"{pct}{suffix}")
-
-            # Quick visual: where this score sits in the distribution
-            fig_pos = go.Figure()
-            all_scores = df["Access Score"].values
-            fig_pos.add_trace(go.Histogram(
-                x=all_scores, nbinsx=20,
-                marker=dict(color="#E5E5E5", line=dict(width=0)),
-                showlegend=False, hoverinfo="skip"
+        # CHART 1 — Distribution overlay: brand vs all
+        with col_a:
+            st.markdown(f"<div class='chart-title'>{focus_brand} vs market distribution</div><div class='chart-sub'>Density of access scores</div>", unsafe_allow_html=True)
+            fig = go.Figure()
+            if len(others_df):
+                fig.add_trace(go.Histogram(
+                    x=others_df["Access Score"], name="Other brands",
+                    marker=dict(color="#D1D5DB"), opacity=0.6, nbinsx=20,
+                    histnorm="probability density",
+                    hovertemplate="Other brands<br>Score: %{x}<extra></extra>",
+                ))
+            fig.add_trace(go.Histogram(
+                x=focus_df["Access Score"], name=focus_brand,
+                marker=dict(color=ZS_ORANGE), opacity=0.85, nbinsx=20,
+                histnorm="probability density",
+                hovertemplate=f"{focus_brand}<br>Score: %{{x}}<extra></extra>",
             ))
-            fig_pos.add_vline(x=row["Access Score"], line_color="#FF6B35", line_width=3,
-                             annotation_text=f"This policy: {row['Access Score']}",
-                             annotation_position="top",
-                             annotation_font=dict(size=12, color="#FF6B35", family="Inter"))
-            fig_pos.add_vline(x=50, line_dash="dash", line_color="#999", line_width=1.5,
-                             annotation_text="FDA parity", annotation_position="bottom")
-            fig_pos.update_layout(
-                height=200, plot_bgcolor="white", paper_bgcolor="white",
-                font=dict(family="Inter", color="#1A1A1A"),
-                margin=dict(t=20, b=20, l=10, r=10),
-                xaxis=dict(title="Access Score", gridcolor="#F0F0F0"),
-                yaxis=dict(title="Policy count", gridcolor="#F0F0F0"),
-                showlegend=False,
+            fig.add_vline(x=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
+            fig = style_fig(fig, height=280, showlegend=True)
+            fig.update_xaxes(title="Access score", range=[0, 100])
+            fig.update_yaxes(title="Density")
+            fig.update_layout(barmode="overlay")
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # CHART 2 — Restriction profile radar
+        with col_b:
+            st.markdown(f"<div class='chart-title'>{focus_brand} restriction profile</div><div class='chart-sub'>% of brand policies with each restriction (vs market)</div>", unsafe_allow_html=True)
+            axes = ["Brand step", "Generic step", "Photo", "TB", "Specialist", "Qty"]
+            def profile(d):
+                if not len(d): return [0]*6
+                return [
+                    100 * (d["_brand_steps"]>0).mean(),
+                    100 * (d["_generic_steps"]>0).mean(),
+                    100 * (d["_phototherapy"]==1).mean(),
+                    100 * (d["_tb"]==1).mean(),
+                    100 * (d["_specialist"]==1).mean(),
+                    100 * (d["_qty"]==1).mean(),
+                ]
+            focus_prof = profile(focus_df)
+            other_prof = profile(others_df)
+
+            fig = go.Figure()
+            if len(others_df):
+                fig.add_trace(go.Scatterpolar(
+                    r=other_prof + [other_prof[0]],
+                    theta=axes + [axes[0]],
+                    fill="toself", name="Other brands",
+                    line=dict(color="#9CA3AF", width=2),
+                    fillcolor="rgba(156,163,175,0.2)",
+                ))
+            fig.add_trace(go.Scatterpolar(
+                r=focus_prof + [focus_prof[0]],
+                theta=axes + [axes[0]],
+                fill="toself", name=focus_brand,
+                line=dict(color=ZS_ORANGE, width=2),
+                fillcolor="rgba(255,107,53,0.3)",
+            ))
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(range=[0, 100], tickfont=dict(size=9, color=TEXT_MUTED),
+                                   gridcolor="#E5E7EB", linecolor="#E5E7EB"),
+                    angularaxis=dict(tickfont=dict(size=10, color=TEXT_DARK), gridcolor="#E5E7EB"),
+                ),
+                height=300,
+                font=dict(family="Inter"),
+                margin=dict(t=20, b=20, l=30, r=30),
+                paper_bgcolor="white",
+                showlegend=True,
+                legend=dict(orientation="h", y=-0.15, font=dict(size=10)),
             )
-            st.markdown("**This policy in the context of all 79**")
-            st.plotly_chart(fig_pos, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-            # Headline insight summarizing this policy
-            rests = []
-            bs = to_int(row["Number of Steps through Brands"], 0)
-            gs = to_int(row["Number of Steps through Generic"], 0)
-            if bs > 0: rests.append(f"{bs} brand step{'s' if bs > 1 else ''}")
-            if gs > 0: rests.append(f"{gs} generic step{'s' if gs > 1 else ''}")
-            if row["TB Test required"] == "Yes": rests.append("TB testing")
-            if row["Step through-Phototherapy"] == "Yes": rests.append("phototherapy step")
-            if row["Specialist Types"] not in ["NA", "No", ""]:
-                rests.append(f"specialty restriction ({row['Specialist Types']})")
+        # CHART 3 — Brand's policies ranked by access
+        st.markdown(f"<div class='chart-title'>{focus_brand} policies ranked by access score</div><div class='chart-sub'>Click bar to identify policy</div>", unsafe_allow_html=True)
+        ranked = focus_df.sort_values("Access Score").copy()
+        ranked["color"] = ranked["Severity"].map({
+            "critical": COLOR_CRITICAL, "warning": COLOR_WARNING,
+            "monitor": COLOR_MONITOR, "success": COLOR_SUCCESS
+        })
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=ranked["Policy ID"], y=ranked["Access Score"],
+            marker=dict(color=ranked["color"]),
+            text=[f"{v}" for v in ranked["Access Score"]],
+            textposition="outside",
+            textfont=dict(size=9, color=TEXT_DARK),
+            customdata=ranked["Severity Label"],
+            hovertemplate="<b>Policy %{x}</b><br>Score: %{y}<br>Tier: %{customdata}<extra></extra>",
+        ))
+        fig.add_hline(y=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
+        fig = style_fig(fig, height=300)
+        fig.update_xaxes(title=None, tickangle=-45, tickfont=dict(size=8))
+        fig.update_yaxes(title="Access score", range=[0, 100])
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-            rest_text = "; ".join(rests) if rests else "no major access restrictions"
-            st.markdown(f"""
-            <div class='insight-box'>
-                <strong>Summary:</strong> This {row['Brand']} policy from payer {row['Policy ID']} imposes {rest_text}.
-                Initial authorization runs {row['Initial Authorization Duration(in-months)']} months;
-                reauthorization is {'required' if row['Reauthorization Required'] == 'Yes' else 'not required'}.
-                Age eligibility: {row['Age']}.
+        # Smart callout
+        peers = others_df.groupby("Brand")["Access Score"].mean()
+        if len(peers):
+            rank = (peers < focus_avg).sum() + 1
+            n_brands = peers.size + 1
+            comparison_text = f"rank <strong>{rank} of {n_brands}</strong>"
+        else:
+            comparison_text = "only brand in view"
+
+        st.markdown(f"""
+        <div class='callout'>
+            <strong>{focus_brand}:</strong> {comparison_text} on average access ({focus_avg:.1f} vs market avg {others_avg:.1f}).
+            Profile shows {'higher' if delta_vs_market<0 else 'lower'} friction than peers across {sum(1 for a,b in zip(focus_prof,other_prof) if a>b)}/6 restriction categories.
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ----------------------------------------------------------------
+# TAB 4 — POLICY INSPECTOR (drill-down)
+# ----------------------------------------------------------------
+with tab4:
+    if not len(dfv):
+        st.info("No policies match the current filters.")
+    else:
+        df_v = dfv.reset_index(drop=True).copy()
+        df_v["__key"] = df_v["Display Name"] + "  (" + df_v["Filename"] + ")"
+        sel = st.selectbox("Policy", options=df_v["__key"].tolist(), label_visibility="collapsed")
+        row = df_v[df_v["__key"] == sel].iloc[0]
+        sev = row["Severity"]
+        sev_label = row["Severity Label"]
+
+        # Header band
+        st.markdown(f"""
+        <div style='background:#111827; border-radius:4px; padding:0.9rem 1.2rem; margin-bottom:0.8rem;'>
+            <div style='display:flex; gap:0.5rem; align-items:center; margin-bottom:0.4rem;'>
+                <span class='badge badge-{sev}'>{sev_label}</span>
+                <span style='color:#FF6B35; font-weight:600; font-size:0.85rem;'>{row['Brand']}</span>
+                <span style='color:#9CA3AF; font-size:0.78rem;'>· Policy {row['Policy ID']}</span>
             </div>
-            """, unsafe_allow_html=True)
+            <div style='font-family:"Source Serif Pro",serif; font-size:1.25rem; color:#FFFFFF; font-weight:600; line-height:1.3;'>
+                Access Score <span style='color:#FF6B35;'>{row['Access Score']}</span>
+                · {abs(row['Access Score']-50)} pts {"below" if row['Access Score']<50 else "above"} FDA parity
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with sub_params:
-            # Two-column parameter listing
-            params_left = ["Age", "Number of Steps through Brands", "Number of Steps through Generic",
-                          "Step through-Phototherapy", "TB Test required", "Specialist Types"]
-            params_right = ["Initial Authorization Duration(in-months)",
-                           "Reauthorization Duration(in-months)",
-                           "Reauthorization Required", "Quantity Limits"]
+        # KPI strip + waterfall chart together
+        brand_avg = df[df["Brand"] == row["Brand"]]["Access Score"].mean()
+        all_avg = df["Access Score"].mean()
+        pct_within_brand = int((df[df["Brand"] == row["Brand"]]["Access Score"] <= row["Access Score"]).mean() * 100)
 
-            pcol_l, pcol_r = st.columns(2)
-            for col_list, col_widget in [(params_left, pcol_l), (params_right, pcol_r)]:
-                with col_widget:
-                    for c in col_list:
-                        val = str(row[c])
-                        # Color the value by sentiment
-                        val_color = "#1A1A1A"
-                        if val == "Yes" and c in ("TB Test required", "Step through-Phototherapy"):
-                            val_color = "#B92434"
-                        elif val == "No" and c in ("TB Test required", "Step through-Phototherapy"):
-                            val_color = "#1E7A35"
-                        elif c.startswith("Number of Steps") and val.isdigit() and int(val) > 0:
-                            val_color = "#B92434"
-                        elif val == "No" and c.startswith("Number of Steps"):
-                            val_color = "#1E7A35"
+        st.markdown(f"""
+        <div class='kpi-strip' style='grid-template-columns: repeat(4, 1fr);'>
+            <div class='kpi-tile accent'>
+                <div class='kpi-label'>vs Brand average</div>
+                <div class='kpi-value'>{row['Access Score']}</div>
+                <div class='kpi-delta {"pos" if row['Access Score']>=brand_avg else "neg"}'>
+                    {row['Access Score']-brand_avg:+.1f} vs {brand_avg:.1f}
+                </div>
+            </div>
+            <div class='kpi-tile'>
+                <div class='kpi-label'>vs Overall average</div>
+                <div class='kpi-value'>{row['Access Score']}</div>
+                <div class='kpi-delta {"pos" if row['Access Score']>=all_avg else "neg"}'>
+                    {row['Access Score']-all_avg:+.1f} vs {all_avg:.1f}
+                </div>
+            </div>
+            <div class='kpi-tile'>
+                <div class='kpi-label'>Brand percentile</div>
+                <div class='kpi-value'>{pct_within_brand}</div>
+                <div class='kpi-delta neutral'>of {row['Brand']} policies</div>
+            </div>
+            <div class='kpi-tile'>
+                <div class='kpi-label'>Restriction count</div>
+                <div class='kpi-value'>{int(row['Restriction Score'])}</div>
+                <div class='kpi-delta neutral'>access gates imposed</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-                        st.markdown(f"""
-                        <div style='padding: 0.6rem 0; border-bottom: 1px dashed #E5E5E5;'>
-                            <div style='font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #6B6B6B;'>{c}</div>
-                            <div style='font-size: 0.95rem; font-weight: 500; color: {val_color}; margin-top: 0.2rem;'>{val}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+        col_a, col_b = st.columns([5, 4])
 
-            # Verbatim language
-            st.markdown("##### Verbatim policy language extracted")
-            with st.expander("Step Therapy Requirements (verbatim)", expanded=False):
-                st.write(row["Step Therapy Requirements Documented in Policy"])
-            with st.expander("Reauthorization Requirements (verbatim)", expanded=False):
-                st.write(row["Reauthorization Requirements Documented in Policy"])
-
-        with sub_score:
-            # Score waterfall
-            st.markdown("**How this Access Score was computed**")
-            st.caption("Deterministic rules-based formula. Starts at 50 (FDA parity), then adjusts by each parameter.")
+        # Waterfall chart of score calculation
+        with col_a:
+            st.markdown("<div class='chart-title'>Score breakdown</div><div class='chart-sub'>How each parameter shifts the score from FDA parity baseline of 50</div>", unsafe_allow_html=True)
 
             deductions = []
             additions = []
-            base = 50
-
             bs = to_int(row["Number of Steps through Brands"], 0)
             gs = to_int(row["Number of Steps through Generic"], 0)
-            if bs > 0: deductions.append((f"Brand step therapy × {bs}", -5.0 * min(bs, 5)))
-            if gs > 0: deductions.append((f"Generic step therapy × {gs}", -2.5 * min(gs, 5)))
-            if row["Step through-Phototherapy"] == "Yes": deductions.append(("Phototherapy step required", -5.0))
-            if row["TB Test required"] == "Yes": deductions.append(("TB testing required", -3.5))
+            if bs > 0: deductions.append((f"Brand step × {bs}", -5.0 * min(bs, 5)))
+            if gs > 0: deductions.append((f"Generic step × {gs}", -2.5 * min(gs, 5)))
+            if row["Step through-Phototherapy"] == "Yes": deductions.append(("Phototherapy", -5.0))
+            if row["TB Test required"] == "Yes": deductions.append(("TB testing", -3.5))
             spec = str(row["Specialist Types"])
-            if spec not in ("NA", "No", ""):
+            if spec not in ("NA","No",""):
                 n_sp = len([s for s in spec.split(";") if s.strip()])
-                if n_sp <= 1: deductions.append((f"Single specialty restriction ({spec})", -3.5))
-                elif n_sp <= 2: deductions.append((f"2-specialty restriction", -2.5))
-                else: deductions.append(("Broad specialty list", -1.5))
-            if str(row["Quantity Limits"]) not in ("No", "NA", ""):
-                deductions.append(("Quantity limits", -2.0))
-
+                deductions.append((f"Specialist ({n_sp})", -3.5 if n_sp<=1 else (-2.5 if n_sp<=2 else -1.5)))
+            if str(row["Quantity Limits"]) not in ("No","NA",""):
+                deductions.append(("Quantity limit", -2.0))
             ia = to_int(row["Initial Authorization Duration(in-months)"])
-            if ia >= 12: additions.append(("Initial auth ≥ 12 months", 6.0))
-            elif ia >= 6: additions.append((f"Initial auth {ia} months", 2.0))
-            elif 0 < ia < 6: deductions.append((f"Short initial auth ({ia} mo)", -3.0))
-
+            if ia >= 12: additions.append(("Initial auth ≥12mo", 6.0))
+            elif ia >= 6: additions.append((f"Initial auth {ia}mo", 2.0))
+            elif 0<ia<6: deductions.append((f"Short auth ({ia}mo)", -3.0))
             rd = to_int(row["Reauthorization Duration(in-months)"])
-            if rd >= 12: additions.append(("Reauth ≥ 12 months", 4.0))
-            elif rd >= 6: additions.append((f"Reauth {rd} months", 1.0))
-            elif 0 < rd < 6: deductions.append((f"Short reauth ({rd} mo)", -2.0))
+            if rd >= 12: additions.append(("Reauth ≥12mo", 4.0))
+            elif rd >= 6: additions.append((f"Reauth {rd}mo", 1.0))
+            elif 0<rd<6: deductions.append((f"Short reauth ({rd}mo)", -2.0))
+            if row["Reauthorization Required"] == "No": additions.append(("No reauth required", 3.0))
 
-            if row["Reauthorization Required"] == "No": additions.append(("No reauthorization required", 3.0))
+            # Build waterfall sequence
+            labels = ["FDA parity"] + [d[0] for d in deductions] + [a[0] for a in additions] + ["Final"]
+            measures = ["absolute"] + ["relative"]*(len(deductions)+len(additions)) + ["total"]
+            values = [50] + [d[1] for d in deductions] + [a[1] for a in additions] + [None]
 
-            # Show in table form
-            wcol1, wcol2 = st.columns(2)
-            with wcol1:
-                st.markdown("**Deductions (restrictions)**")
-                if deductions:
-                    for label, val in deductions:
-                        st.markdown(f"<div style='display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px dashed #E5E5E5;'><span style='color: #4A4A4A;'>{label}</span><span style='color: #B92434; font-weight: 600;'>{val:.1f}</span></div>", unsafe_allow_html=True)
-                else:
-                    st.caption("No deductions applied")
-            with wcol2:
-                st.markdown("**Additions (access-friendly)**")
-                if additions:
-                    for label, val in additions:
-                        st.markdown(f"<div style='display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px dashed #E5E5E5;'><span style='color: #4A4A4A;'>{label}</span><span style='color: #1E7A35; font-weight: 600;'>+{val:.1f}</span></div>", unsafe_allow_html=True)
-                else:
-                    st.caption("No additions applied")
+            fig = go.Figure(go.Waterfall(
+                x=labels, y=values, measure=measures,
+                connector=dict(line=dict(color="#D1D5DB", width=1)),
+                decreasing=dict(marker=dict(color=COLOR_CRITICAL)),
+                increasing=dict(marker=dict(color=COLOR_SUCCESS)),
+                totals=dict(marker=dict(color=ZS_ORANGE)),
+                text=[f"{v:+.1f}" if isinstance(v,(int,float)) and m=="relative" else (f"{int(v)}" if v else f"{int(row['Access Score'])}") for v,m in zip(values,measures)],
+                textposition="outside",
+                textfont=dict(size=10, color=TEXT_DARK),
+            ))
+            fig = style_fig(fig, height=320)
+            fig.update_xaxes(title=None, tickangle=-30, tickfont=dict(size=9))
+            fig.update_yaxes(title="Score points", range=[0, 70])
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-            net = sum(v for _, v in deductions) + sum(v for _, v in additions)
-            final = max(0, min(100, base + net))
-            st.markdown(f"""
-            <div style='background: #FFF8F2; border-left: 3px solid #FF6B35; padding: 1rem 1.25rem; margin-top: 1rem; border-radius: 0 4px 4px 0;'>
-                <div style='font-size: 0.95rem; color: #4A4A4A;'>
-                    <strong>50</strong> baseline (FDA parity)
-                    {'-' if net < 0 else '+'} <strong>{abs(net):.1f}</strong> net adjustment
-                    = <strong style='color: #FF6B35; font-size: 1.15rem;'>{int(round(final))}</strong> final Access Score
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        # Parameter grid (compact)
+        with col_b:
+            st.markdown("<div class='chart-title'>Parameter detail</div><div class='chart-sub'>Extracted values</div>", unsafe_allow_html=True)
+            params = [
+                ("Age", row["Age"], None),
+                ("Brand steps", row["Number of Steps through Brands"], "step"),
+                ("Generic steps", row["Number of Steps through Generic"], "step"),
+                ("Phototherapy", row["Step through-Phototherapy"], "yesno_bad"),
+                ("TB test", row["TB Test required"], "yesno_bad"),
+                ("Specialist", row["Specialist Types"], None),
+                ("Quantity limit", row["Quantity Limits"], None),
+                ("Initial auth (mo)", row["Initial Authorization Duration(in-months)"], "month"),
+                ("Reauth (mo)", row["Reauthorization Duration(in-months)"], "month"),
+                ("Reauth required", row["Reauthorization Required"], None),
+            ]
+            html = "<div style='border:1px solid #E5E7EB; border-radius:4px; overflow:hidden;'>"
+            for label, val, kind in params:
+                vs = str(val)
+                color = TEXT_DARK
+                if kind == "yesno_bad":
+                    color = COLOR_CRITICAL if vs == "Yes" else (COLOR_SUCCESS if vs == "No" else TEXT_MUTED)
+                elif kind == "step" and vs.isdigit() and int(vs) > 0:
+                    color = COLOR_CRITICAL
+                elif kind == "step" and vs in ("No", "0"):
+                    color = COLOR_SUCCESS
+                elif kind == "month":
+                    try:
+                        n = int(vs); color = COLOR_SUCCESS if n>=12 else (COLOR_WARNING if n>=6 else COLOR_CRITICAL)
+                    except: color = TEXT_MUTED
+                html += f"""
+                <div style='display:flex; justify-content:space-between; padding:0.35rem 0.7rem;
+                            border-bottom:1px dashed #F3F4F6; font-size:0.83rem;'>
+                    <span style='color:{TEXT_MUTED};'>{label}</span>
+                    <span style='color:{color}; font-weight:600;'>{vs[:40]}</span>
+                </div>"""
+            html += "</div>"
+            st.markdown(html, unsafe_allow_html=True)
+
+        # Expandable verbatim language
+        with st.expander("Verbatim policy language", expanded=False):
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                st.markdown("**Step therapy requirements**")
+                st.caption(row["Step Therapy Requirements Documented in Policy"])
+            with cc2:
+                st.markdown("**Reauthorization requirements**")
+                st.caption(row["Reauthorization Requirements Documented in Policy"])
 
 
 # ----------------------------------------------------------------
-# TAB 4: SIDE-BY-SIDE COMPARE
+# TAB 5 — COMPARATIVE ANALYSIS (was: Side-by-Side Compare)
 # ----------------------------------------------------------------
-with tab_compare:
-    st.markdown(f"""
-    <div class='insight-title'>
-        <span class='category'>Comparison view</span>
-        <span class='pipe'>|</span>
-        Diff 2–3 policies on every parameter
-    </div>
-    """, unsafe_allow_html=True)
-
-    if len(df_view) < 2:
-        st.info("Need at least 2 rows in the filter to compare.")
+with tab5:
+    if len(dfv) < 2:
+        st.info("Need at least 2 policies in the filter to compare.")
     else:
-        df_v = df_view.reset_index(drop=True).copy()
+        df_v = dfv.reset_index(drop=True).copy()
         df_v["__key"] = df_v["Display Name"] + "  (" + df_v["Filename"] + ")"
-        selected = st.multiselect("Pick 2–3 policies to compare",
-                                  df_v["__key"].tolist(),
-                                  default=df_v["__key"].tolist()[:2],
-                                  max_selections=3)
+        picked_keys = st.multiselect(
+            "Select 2–4 policies for comparison",
+            df_v["__key"].tolist(),
+            default=df_v["__key"].tolist()[:2],
+            max_selections=4,
+        )
 
-        if len(selected) >= 2:
-            picked = df_v[df_v["__key"].isin(selected)].copy()
+        if len(picked_keys) >= 2:
+            picked = df_v[df_v["__key"].isin(picked_keys)].copy()
+            picked["short"] = picked.apply(lambda r: f"{r['Brand'][:8]} · {r['Policy ID'][:10]}", axis=1)
+
+            col_a, col_b = st.columns([5, 4])
+
+            # CHART 1 — Bar chart of access scores side-by-side
+            with col_a:
+                st.markdown("<div class='chart-title'>Access score comparison</div><div class='chart-sub'>Selected policies</div>", unsafe_allow_html=True)
+                colors = picked["Severity"].map({
+                    "critical": COLOR_CRITICAL, "warning": COLOR_WARNING,
+                    "monitor": COLOR_MONITOR, "success": COLOR_SUCCESS
+                })
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=picked["short"], y=picked["Access Score"],
+                    marker=dict(color=colors),
+                    text=picked["Access Score"], textposition="outside",
+                    textfont=dict(size=11, color=TEXT_DARK),
+                ))
+                fig.add_hline(y=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
+                fig = style_fig(fig, height=270)
+                fig.update_yaxes(title="Access score", range=[0, 100])
+                fig.update_xaxes(title=None, tickfont=dict(size=10))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+            # CHART 2 — Radar overlay
+            with col_b:
+                st.markdown("<div class='chart-title'>Restriction profile overlay</div><div class='chart-sub'>Normalized 0–1 by restriction category</div>", unsafe_allow_html=True)
+                axes = ["Brand step", "Generic step", "Photo", "TB", "Specialist", "Qty"]
+                fig = go.Figure()
+                colors_radar = [ZS_ORANGE, ZS_NAVY, COLOR_SUCCESS, "#7C3AED"]
+                for i, (_, r) in enumerate(picked.iterrows()):
+                    vals = [
+                        min(r["_brand_steps"]/5, 1),
+                        min(r["_generic_steps"]/5, 1),
+                        r["_phototherapy"],
+                        r["_tb"],
+                        r["_specialist"],
+                        r["_qty"],
+                    ]
+                    fig.add_trace(go.Scatterpolar(
+                        r=vals + [vals[0]],
+                        theta=axes + [axes[0]],
+                        fill="toself", name=r["short"],
+                        line=dict(color=colors_radar[i % 4], width=2),
+                        fillcolor=colors_radar[i % 4],
+                        opacity=0.35,
+                    ))
+                fig.update_layout(
+                    polar=dict(radialaxis=dict(range=[0,1], tickfont=dict(size=8), gridcolor="#E5E7EB"),
+                              angularaxis=dict(tickfont=dict(size=10), gridcolor="#E5E7EB")),
+                    height=290,
+                    font=dict(family="Inter"),
+                    margin=dict(t=10, b=10, l=30, r=30),
+                    paper_bgcolor="white",
+                    showlegend=True,
+                    legend=dict(orientation="h", y=-0.1, font=dict(size=9)),
+                )
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+            # Diff table — visual
+            st.markdown("<div class='chart-title'>Parameter-by-parameter</div><div class='chart-sub'>Differences highlighted</div>", unsafe_allow_html=True)
             display_cols = ["Brand", "Access Score", "Age",
                 "Number of Steps through Brands", "Number of Steps through Generic",
                 "Step through-Phototherapy", "TB Test required", "Quantity Limits",
@@ -954,155 +1076,72 @@ with tab_compare:
                 "Initial Authorization Duration(in-months)",
                 "Reauthorization Duration(in-months)",
                 "Reauthorization Required"]
-            comp = picked.set_index("__key")[display_cols].astype(str).T
-
-            # Compute which rows differ
-            diff_mask = comp.apply(lambda r: len(set(r.values)) > 1, axis=1)
-            n_diffs = diff_mask.sum()
-
-            st.markdown(f"""
-            <div class='insight-box'>
-                <strong>{n_diffs} of {len(comp)} parameters</strong> differ across the selected policies, highlighted below.
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Render styled table
-            def highlight_diffs(row):
-                vals = [str(v).strip() for v in row.values]
+            comp = picked.set_index("short")[display_cols].astype(str).T
+            def diff_style(r):
+                vals = [str(v).strip() for v in r.values]
                 if len(set(vals)) > 1:
-                    return ["background-color: #FFF8F2; color: #1A1A1A;"] * len(row)
-                return ["color: #6B6B6B;"] * len(row)
+                    return ["background-color:#FFF8F2; color:#111827; font-weight:500;"] * len(r)
+                return ["color:#9CA3AF;"] * len(r)
+            st.dataframe(comp.style.apply(diff_style, axis=1), use_container_width=True, height=440)
 
-            styled = comp.style.apply(highlight_diffs, axis=1)
-            st.dataframe(styled, use_container_width=True, height=520)
-
-            # Radar
-            st.markdown("##### Restrictiveness profile")
-            radar_axes = ["Brand Steps", "Generic Steps", "Phototherapy", "TB Test", "Specialist Required"]
-            radar_df = restrictiveness_signals(picked).set_index("__key")[radar_axes].copy()
-            radar_df["Brand Steps"] = (radar_df["Brand Steps"] / 5).clip(0, 1)
-            radar_df["Generic Steps"] = (radar_df["Generic Steps"] / 5).clip(0, 1)
-
-            fig_radar = go.Figure()
-            zs_colors = ["#FF6B35", "#1A1A1A", "#6B6B6B"]
-            for i, (key, vals) in enumerate(radar_df.iterrows()):
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=list(vals.values) + [vals.values[0]],
-                    theta=radar_axes + [radar_axes[0]],
-                    fill="toself",
-                    name=key.split("(")[0].strip(),
-                    opacity=0.45,
-                    line=dict(color=zs_colors[i % len(zs_colors)], width=2),
-                ))
-            fig_radar.update_layout(
-                polar=dict(
-                    radialaxis=dict(range=[0, 1], visible=True, gridcolor="#E5E5E5", tickfont=dict(size=10)),
-                    angularaxis=dict(gridcolor="#E5E5E5", tickfont=dict(size=11, color="#1A1A1A"))
-                ),
-                showlegend=True,
-                legend=dict(orientation="h", y=-0.15, font=dict(size=11)),
-                height=420,
-                font=dict(family="Inter", color="#1A1A1A"),
-                margin=dict(t=20, b=20, l=40, r=40),
-                paper_bgcolor="white",
-            )
-            st.plotly_chart(fig_radar, use_container_width=True, config={"displayModeBar": False})
-
+            # Summary
+            n_diff = sum(1 for col in comp.index if len(set(str(v).strip() for v in comp.loc[col].values)) > 1)
             st.markdown(f"""
-            <div class='footnote'>
-                Restrictiveness signals normalized to 0–1 scale (step counts divided by 5).
-                A larger polygon = more restrictive policy.
+            <div class='callout'>
+                <strong>{n_diff} of {len(comp)} parameters</strong> differ across the {len(picked_keys)} selected policies.
+                Highlighted rows show where these policies diverge.
             </div>
             """, unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------------
-# TAB 5: RAW DATA
+# TAB 6 — METHODOLOGY (compact)
 # ----------------------------------------------------------------
-with tab_data:
-    st.markdown(f"""
-    <div class='insight-title'>
-        <span class='category'>Raw data</span>
-        <span class='pipe'>|</span>
-        Filtered extraction output ({len(df_view)} rows)
-    </div>
-    """, unsafe_allow_html=True)
+with tab6:
+    col_a, col_b = st.columns([3, 2])
 
-    search = st.text_input("Search (filename or brand)", "")
-    df_show = df_view.drop(columns=["__key", "Severity", "Display Name", "Policy ID"], errors="ignore")
-    if search:
-        mask = (
-            df_show["Filename"].str.contains(search, case=False, na=False)
-            | df_show["Brand"].str.contains(search, case=False, na=False)
-        )
-        df_show = df_show[mask]
+    with col_a:
+        st.markdown("""
+        ##### Pipeline
 
-    st.dataframe(df_show, use_container_width=True, height=540)
+        | Stage | Process |
+        |---|---|
+        | 1 | PDF text extraction (pdfplumber + pdftotext fallback, hash-cached) |
+        | 2 | Hierarchical brand scoping with cross-brand negative filtering |
+        | 3 | Brand-stratified few-shot retrieval (2 same-brand + 1 cross-brand, from 439 gold rows) |
+        | 4 | Gemini 2.5 Flash extraction with Pydantic schema enforcement |
+        | 5 | 3-layer validation: formatting → business rules → contradiction detection |
+        | 6 | Deterministic Access Score (monotonic rules-based, 0–100) |
 
-    col_dl, col_info = st.columns([1, 3])
-    with col_dl:
-        st.download_button(
-            "📥 Download filtered CSV",
-            data=df_show.to_csv(index=False).encode("utf-8"),
-            file_name="result_filtered.csv",
-            mime="text/csv",
-        )
-    with col_info:
-        st.caption(f"Showing {len(df_show)} of {len(df)} rows. Use `keep_default_na=False` when loading in pandas — \"NA\" is a literal value, not a null.")
+        ##### Design priorities
 
+        - **Deterministic scoring** for reproducibility — no LLM variance in the final score
+        - **Evidence-grounded extraction** — every value backed by a verbatim policy quote
+        - **3-layer validation** — formatting + cross-field rules + keyword-based contradiction detection
+        - **Hash-cached at every stage** — iteration is free, reviewers reproduce exactly
+        """)
 
-# ----------------------------------------------------------------
-# TAB 6: METHODOLOGY
-# ----------------------------------------------------------------
-with tab_method:
-    st.markdown(f"""
-    <div class='insight-title'>
-        <span class='category'>Methodology</span>
-        <span class='pipe'>|</span>
-        How the pipeline produces auditable, reproducible results
-    </div>
-    """, unsafe_allow_html=True)
+    with col_b:
+        # Access Score anchor table
+        st.markdown("##### Access Score calibration")
+        anchors = pd.DataFrame({
+            "Anchor": [0, 25, 50, 75, 100],
+            "Label": ["No access", "Restricted", "FDA parity", "Preferred", "Best possible"],
+            "Reference": [
+                "Drug excluded from formulary",
+                "3 brand steps + TB + specialty + age + 6mo auth",
+                "Mirrors FDA label",
+                "No steps, 12mo auth, broad eligibility",
+                "No restrictions"
+            ],
+        })
+        st.dataframe(anchors, use_container_width=True, hide_index=True, height=240)
 
-    st.markdown("""
-    ##### Pipeline at a glance
+        st.markdown("""
+        <div class='callout'>
+            <strong>Note:</strong> Anchors are reference points on a continuous 0–100 scale, not bucketed outputs.
+            Real policies score anywhere on the scale.
+        </div>
+        """, unsafe_allow_html=True)
 
-    The pipeline reads US payer Prior Authorization PDFs and extracts 12 structured business parameters per (filename, brand) combination, then computes a continuous Access Score (0–100).
-
-    | Stage | Process | Output |
-    |---|---|---|
-    | 1 | PDF text extraction (pdfplumber + pdftotext fallback, hash-cached) | Raw text per document |
-    | 2 | Hierarchical brand scoping (section detection + cross-brand negative filtering) | Brand-specific excerpts |
-    | 3 | Brand-stratified few-shot retrieval (2 same-brand + 1 cross-brand from 439 gold rows) | Top-3 examples per call |
-    | 4 | Gemini 2.5 Flash extraction with Pydantic schema enforcement | Structured JSON: value + evidence + confidence |
-    | 5 | 3-layer validation: formatting → business rules → contradiction detection | Cleaned values + issue flags |
-    | 6 | Deterministic Access Score (monotonic rules-based, 0–100) | Single integer per row |
-
-    ##### Why deterministic scoring
-
-    Earlier versions of the pipeline blended a Gemini-rated score (30%) with the rules-based score (70%). For a leaderboard task this introduced a reproducibility hazard: same notebook + same data could produce slightly different scores across runs because LLM responses vary ~5% even at temperature 0.
-
-    The current implementation uses **rules-only scoring** — same inputs always produce the same output, every restriction monotonically decreases the score, and every relaxation monotonically increases it.
-
-    ##### Why evidence-grounded extraction
-
-    Each parameter the LLM returns includes three fields: `value`, `evidence` (a verbatim 1–3 sentence quote from the policy), and `confidence` (high/medium/low). The schema is enforced via Pydantic so this structure is guaranteed. This makes hallucinations visible during spot-check and identifies which rows are most worth manual review.
-
-    ##### Access Score calibration
-
-    | Anchor | Reference | Example |
-    |---|---|---|
-    | 0   | No access | Drug excluded from formulary entirely |
-    | 25  | Restricted | 3 brand steps + TB test + specialty + age threshold + 6mo auth |
-    | 50  | FDA parity | Mirrors FDA label, no extra restrictions |
-    | 75  | Preferred | No step therapy, 12mo auth, broad eligibility |
-    | 100 | Best possible | No restrictions whatsoever |
-
-    The continuous scale is preserved — anchors are reference points, not bucketed outputs.
-    """)
-
-    st.markdown("""
-    <div class='footer-callout'>
-        Design choices prioritize <span class='highlight'>structured problem-solving, robustness, and interpretability</span> over raw model power
-        — every claim is traceable, every score is auditable, every restriction is named and weighted.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='footnote'>Pipeline run: {pd.Timestamp.now().strftime('%Y-%m-%d')} · n={len(dfv)} (filename, brand) rows in current view · Built for the H1'26 hackathon</div>", unsafe_allow_html=True)
