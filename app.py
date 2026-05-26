@@ -1,20 +1,19 @@
 """
-Payer Policy Intelligence — Executive Dashboard (v3)
-H1'26 Hackathon | ZS Associates analytical-product aesthetic
+Plaque Psoriasis Market Access Intelligence
+A ZS-style client-ready dashboard built on extracted prior-authorization policy data.
 
-Design priorities (v3):
-- Chart-forward (text is supporting, not the body)
-- Interactive: clicks/selections cross-filter
-- Narrative arc: Overview → Diagnosis → Brand → Policy → Compare → Audit
-- Information density without clutter
-
-Run:
-    pip install -r requirements.txt
+Single-file Streamlit application. To run locally:
     streamlit run app.py
+
+The app loads `PA_Gold_Standard_Dataset_v5.xlsx` (sheet: "Gold Standard") from the
+working directory by default; if not found, a file uploader is shown.
 """
 
+from __future__ import annotations
+
 import io
-import pathlib
+import re
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -23,1125 +22,1581 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-
-# ============================================================
-# PAGE CONFIG
-# ============================================================
+# ============================================================================
+#  PAGE CONFIG
+# ============================================================================
 st.set_page_config(
-    page_title="Payer Policy Intelligence",
-    page_icon="📊",
+    page_title="PsO Market Access Intelligence",
+    page_icon="◆",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ============================================================
-# DESIGN TOKENS
-# ============================================================
-ZS_ORANGE = "#FF6B35"
-ZS_NAVY = "#1F4E79"
-COLOR_CRITICAL = "#B92434"
-COLOR_WARNING = "#D97706"
-COLOR_MONITOR = "#6B7280"
-COLOR_SUCCESS = "#059669"
-GRAY_BG = "#F9FAFB"
-GRAY_BORDER = "#E5E7EB"
-TEXT_DARK = "#111827"
-TEXT_MUTED = "#6B7280"
+# ============================================================================
+#  DESIGN SYSTEM
+# ============================================================================
+INK         = "#0E1B2C"   # deep navy, primary text
+INK_SOFT    = "#2B3A52"
+PAPER       = "#F6F1E6"   # cream background
+PAPER_DEEP  = "#EDE6D4"   # subtle panel
+BONE        = "#E1D9C5"
+LINE        = "#C9BFA6"
+AMBER       = "#C8954A"   # signature accent
+AMBER_DEEP  = "#9C7330"
+CORAL       = "#C25437"   # restriction signal
+SAGE        = "#3F6B6B"   # open access signal
+SLATE       = "#5B6B82"
+GOLD_LIGHT  = "#E6CC95"
 
-BRAND_PALETTE = ["#FF6B35", "#1F4E79", "#059669", "#D97706", "#7C3AED",
-                 "#0EA5E9", "#B92434", "#65A30D", "#DB2777", "#0891B2",
-                 "#9333EA", "#CA8A04", "#1E3A8A", "#16A34A", "#DC2626"]
+# Access tier palette — graduated from restrictive (warm) to open (cool)
+ACCESS_TIER_ORDER = ["Highly Restrictive", "Restricted", "Moderate", "Open", "Highly Open"]
+ACCESS_TIER_COLOR = {
+    "Highly Restrictive": "#8B2E1F",
+    "Restricted":         "#C25437",
+    "Moderate":           "#C8954A",
+    "Open":               "#6B8E6B",
+    "Highly Open":        "#3F6B6B",
+    "Unscored":           "#9A9A8B",
+}
 
-
-# ============================================================
-# GLOBAL CSS
-# ============================================================
-CSS = """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+Pro:wght@600;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif !important;
-        color: #111827;
-    }
-    .block-container { padding: 1rem 1.5rem 3rem 1.5rem !important; max-width: 1500px; }
-    [data-testid="stSidebar"] { background: #F9FAFB; border-right: 1px solid #E5E7EB; }
-    [data-testid="stSidebar"] .block-container { padding-top: 1.2rem !important; }
-    #MainMenu, footer, header { visibility: hidden; }
-
-    h1 { font-family: 'Source Serif Pro', serif !important; font-weight: 700; font-size: 1.7rem !important;
-         color: #111827; letter-spacing: -0.01em; margin-bottom: 0 !important; }
-    h2 { font-family: 'Source Serif Pro', serif !important; font-weight: 600; font-size: 1.15rem !important;
-         color: #111827; margin: 1rem 0 0.5rem 0 !important; letter-spacing: -0.005em; }
-    h3 { font-family: 'Inter', sans-serif !important; font-weight: 600; font-size: 0.85rem !important;
-         text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280 !important; margin: 0.8rem 0 0.3rem 0 !important; }
-
-    /* Insight headline (top of page) */
-    .headline {
-        font-family: 'Source Serif Pro', serif;
-        font-size: 1.4rem;
-        line-height: 1.3;
-        color: #111827;
-        margin: 0.2rem 0 1rem 0;
-        font-weight: 600;
-    }
-    .headline .pre { color: #FF6B35; font-weight: 700; }
-    .headline .pipe { color: #D1D5DB; margin: 0 0.4rem; font-weight: 300; }
-
-    /* KPI strip — compact horizontal */
-    .kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; margin: 0.5rem 0 1.2rem 0; }
-    .kpi-tile {
-        background: #FFFFFF;
-        border: 1px solid #E5E7EB;
-        border-radius: 4px;
-        padding: 0.6rem 0.8rem;
-        line-height: 1.1;
-    }
-    .kpi-tile.accent { border-top: 2px solid #FF6B35; }
-    .kpi-tile.critical { border-top: 2px solid #B92434; }
-    .kpi-tile.success { border-top: 2px solid #059669; }
-    .kpi-tile.warning { border-top: 2px solid #D97706; }
-    .kpi-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6B7280; font-weight: 600; }
-    .kpi-value { font-size: 1.55rem; font-weight: 700; color: #111827; margin-top: 0.15rem; }
-    .kpi-delta { font-size: 0.72rem; margin-top: 0.1rem; }
-    .kpi-delta.neg { color: #B92434; }
-    .kpi-delta.pos { color: #059669; }
-    .kpi-delta.neutral { color: #6B7280; }
-
-    /* Chart card frame */
-    .chart-card {
-        background: #FFFFFF;
-        border: 1px solid #E5E7EB;
-        border-radius: 4px;
-        padding: 0.75rem 1rem 0.5rem 1rem;
-        margin-bottom: 0.6rem;
-    }
-    .chart-title { font-size: 0.9rem; font-weight: 600; color: #111827; margin-bottom: 0.1rem; }
-    .chart-sub { font-size: 0.75rem; color: #6B7280; margin-bottom: 0.4rem; }
-
-    /* Insight callout (one-line, tight) */
-    .callout {
-        background: #FFF8F2;
-        border-left: 3px solid #FF6B35;
-        padding: 0.55rem 0.85rem;
-        font-size: 0.85rem;
-        color: #1F2937;
-        border-radius: 0 3px 3px 0;
-        margin: 0.4rem 0 0.7rem 0;
-    }
-    .callout strong { color: #FF6B35; }
-
-    /* Footnote */
-    .footnote {
-        font-size: 0.7rem;
-        color: #9CA3AF;
-        border-top: 1px solid #E5E7EB;
-        padding-top: 0.4rem;
-        margin-top: 0.8rem;
-        font-style: italic;
-    }
-
-    /* Badge */
-    .badge {
-        display: inline-block;
-        padding: 0.13rem 0.5rem;
-        border-radius: 3px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        border: 1px solid transparent;
-    }
-    .badge-critical { background:#FBEAEC; color:#B92434; border-color:#F1B8BF; }
-    .badge-warning { background:#FEF3C7; color:#92400E; border-color:#FDE68A; }
-    .badge-monitor { background:#F3F4F6; color:#4B5563; border-color:#D1D5DB; }
-    .badge-success { background:#D1FAE5; color:#065F46; border-color:#A7F3D0; }
-
-    /* Tabs */
-    [data-baseweb="tab-list"] { gap:0; border-bottom:1px solid #E5E7EB; margin-bottom:0.5rem; }
-    [data-baseweb="tab"] { padding:0.5rem 1rem !important; font-weight:500 !important;
-                           color:#6B7280 !important; border-bottom:2px solid transparent !important; font-size:0.92rem !important; }
-    [data-baseweb="tab"][aria-selected="true"] {
-        color:#FF6B35 !important; border-bottom-color:#FF6B35 !important; font-weight:600 !important;
-    }
-
-    /* Streamlit metric overrides */
-    [data-testid="stMetricValue"] { font-size: 1.55rem; font-weight: 700; color: #111827; }
-    [data-testid="stMetricLabel"] { font-size: 0.68rem; text-transform: uppercase; letter-spacing:0.06em; color:#6B7280; font-weight:600; }
-    [data-testid="stMetricDelta"] { font-size: 0.72rem; }
-
-    /* Sidebar */
-    [data-testid="stSidebar"] h3 { font-size:0.7rem !important; text-transform:uppercase; letter-spacing:0.08em;
-                                    color:#6B7280 !important; font-weight:600; margin-top:0.8rem !important; }
-    [data-testid="stSidebar"] .stMultiSelect [data-baseweb="tag"] {
-        background: #FF6B35 !important;
-    }
-
-    /* Buttons */
-    .stDownloadButton button, .stButton button {
-        background: #FF6B35; color: white; border: none; font-weight: 500; font-size: 0.85rem;
-    }
-    .stDownloadButton button:hover, .stButton button:hover { background: #E55A24; }
-
-    /* Selectbox / multiselect compact */
-    [data-baseweb="select"] { font-size: 0.9rem; }
-
-    /* Plotly modebar — hide */
-    .js-plotly-plot .plotly .modebar { display: none !important; }
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
+# Plotly theme aligned to the design system
+PLOTLY_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Manrope, -apple-system, BlinkMacSystemFont, sans-serif",
+              color=INK, size=13),
+    title=dict(font=dict(family="Fraunces, Georgia, serif", color=INK, size=18)),
+    margin=dict(l=20, r=20, t=50, b=20),
+    xaxis=dict(showgrid=False, linecolor=LINE, ticks="outside", tickcolor=LINE),
+    yaxis=dict(gridcolor="rgba(201,191,166,0.35)", linecolor=LINE,
+               ticks="outside", tickcolor=LINE, zeroline=False),
+    legend=dict(font=dict(size=12, color=INK_SOFT), bgcolor="rgba(0,0,0,0)"),
+    hoverlabel=dict(bgcolor="#FFFBF0", bordercolor=AMBER, font_family="Manrope",
+                    font_color=INK),
+)
 
 
-# ============================================================
-# COMMON CHART STYLE
-# ============================================================
-def style_fig(fig, height=300, showlegend=False):
-    fig.update_layout(
-        height=height,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        font=dict(family="Inter, sans-serif", size=11, color=TEXT_DARK),
-        margin=dict(t=10, b=30, l=10, r=10),
-        showlegend=showlegend,
-        legend=dict(orientation="h", y=-0.18, font=dict(size=10)) if showlegend else None,
-        hoverlabel=dict(bgcolor="white", font=dict(family="Inter", size=11), bordercolor="#E5E7EB"),
-    )
-    fig.update_xaxes(gridcolor="#F3F4F6", zerolinecolor="#E5E7EB", linecolor="#E5E7EB",
-                     tickfont=dict(size=10, color=TEXT_MUTED), title_font=dict(size=10, color=TEXT_MUTED))
-    fig.update_yaxes(gridcolor="#F3F4F6", zerolinecolor="#E5E7EB", linecolor="#E5E7EB",
-                     tickfont=dict(size=10, color=TEXT_MUTED), title_font=dict(size=10, color=TEXT_MUTED))
+def apply_layout(fig: go.Figure, **overrides) -> go.Figure:
+    """Merge PLOTLY_LAYOUT with per-chart overrides.
+
+    Performs a shallow merge for dict-valued keys (xaxis, yaxis, legend, etc.)
+    so chart-specific tweaks add to — rather than collide with — the defaults.
+    """
+    merged = {k: (dict(v) if isinstance(v, dict) else v) for k, v in PLOTLY_LAYOUT.items()}
+    for k, v in overrides.items():
+        if isinstance(v, dict) and isinstance(merged.get(k), dict):
+            merged[k] = {**merged[k], **v}
+        else:
+            merged[k] = v
+    fig.update_layout(**merged)
     return fig
 
+# ----------------------------------------------------------------------------
+#  Custom CSS — editorial, refined, consultant
+# ----------------------------------------------------------------------------
+CUSTOM_CSS = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@300;400;500;600;700&display=swap');
 
-# ============================================================
-# DATA LOAD + ENRICH
-# ============================================================
-@st.cache_data
-def load_csv(content: bytes) -> pd.DataFrame:
-    df = pd.read_csv(io.BytesIO(content), keep_default_na=False, na_values=[""])
-    if "Access Score" in df.columns:
-        df["Access Score"] = pd.to_numeric(df["Access Score"], errors="coerce").fillna(50).astype(int)
-    return enrich(df)
+html, body, [class*="css"]  {{
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: {INK};
+}}
 
-@st.cache_data
-def load_path(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path, keep_default_na=False, na_values=[""])
-    if "Access Score" in df.columns:
-        df["Access Score"] = pd.to_numeric(df["Access Score"], errors="coerce").fillna(50).astype(int)
-    return enrich(df)
+.stApp {{
+    background:
+      radial-gradient(1200px 600px at 0% -10%, rgba(200,149,74,0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(63,107,107,0.08), transparent 60%),
+      linear-gradient(180deg, {PAPER} 0%, #F2ECDF 100%);
+    color: {INK};
+}}
+
+/* Remove streamlit default chrome */
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header[data-testid="stHeader"] {{
+    background: transparent;
+}}
+
+/* Main container padding */
+section.main > div.block-container {{
+    padding-top: 1.2rem;
+    padding-bottom: 4rem;
+    max-width: 1400px;
+}}
+
+/* ---------- Editorial header ---------- */
+.zs-masthead {{
+    border-top: 4px solid {INK};
+    border-bottom: 1px solid {LINE};
+    padding: 22px 0 18px 0;
+    margin-bottom: 28px;
+}}
+.zs-eyebrow {{
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: {AMBER_DEEP};
+    font-weight: 600;
+    margin-bottom: 6px;
+}}
+.zs-title {{
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 44px;
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    color: {INK};
+    margin: 0;
+}}
+.zs-title em {{
+    font-style: italic;
+    color: {AMBER_DEEP};
+    font-weight: 500;
+}}
+.zs-subtitle {{
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px;
+    color: {SLATE};
+    margin-top: 10px;
+    max-width: 780px;
+    line-height: 1.5;
+}}
+.zs-meta-row {{
+    display: flex;
+    gap: 28px;
+    margin-top: 16px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: {INK_SOFT};
+    font-weight: 500;
+}}
+.zs-meta-row span b {{
+    color: {INK};
+    font-weight: 700;
+}}
+
+/* ---------- Section headers ---------- */
+.zs-section {{
+    margin: 36px 0 6px 0;
+}}
+.zs-section-eyebrow {{
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: {AMBER_DEEP};
+    font-weight: 700;
+    margin-bottom: 4px;
+}}
+.zs-section-title {{
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: {INK};
+    margin: 0 0 6px 0;
+}}
+.zs-section-deck {{
+    font-size: 14px;
+    color: {SLATE};
+    max-width: 820px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+}}
+.zs-divider {{
+    border-top: 1px solid {LINE};
+    margin: 28px 0 18px 0;
+}}
+
+/* ---------- KPI cards ---------- */
+.zs-kpi {{
+    background: {PAPER};
+    border: 1px solid {LINE};
+    border-radius: 2px;
+    padding: 18px 20px 16px 20px;
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+}}
+.zs-kpi::before {{
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 3px;
+    background: {AMBER};
+}}
+.zs-kpi-label {{
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: {SLATE};
+    font-weight: 600;
+    margin-bottom: 8px;
+    line-height: 1.3;
+}}
+.zs-kpi-value {{
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 38px;
+    font-weight: 600;
+    color: {INK};
+    line-height: 1;
+    letter-spacing: -0.02em;
+}}
+.zs-kpi-unit {{
+    font-size: 14px;
+    color: {SLATE};
+    font-weight: 500;
+    margin-left: 4px;
+}}
+.zs-kpi-foot {{
+    font-size: 12px;
+    color: {INK_SOFT};
+    margin-top: 8px;
+    line-height: 1.4;
+}}
+.zs-kpi.accent::before {{ background: {SAGE}; }}
+.zs-kpi.warn::before    {{ background: {CORAL}; }}
+
+/* ---------- Insight / narrative blocks ---------- */
+.zs-pullquote {{
+    border-left: 3px solid {AMBER};
+    background: rgba(200,149,74,0.06);
+    padding: 16px 18px 16px 22px;
+    margin: 18px 0;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.5;
+    font-weight: 500;
+    color: {INK};
+    font-style: italic;
+}}
+.zs-pullquote strong {{
+    color: {AMBER_DEEP};
+    font-style: normal;
+    font-weight: 700;
+}}
+
+.zs-caption {{
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: {INK_SOFT};
+    margin: 6px 0 14px 0;
+    max-width: 820px;
+}}
+
+.zs-finding {{
+    background: {PAPER};
+    border: 1px solid {LINE};
+    border-left: 3px solid {INK};
+    padding: 14px 18px;
+    margin: 8px 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: {INK};
+}}
+.zs-finding b {{
+    color: {INK};
+    font-weight: 700;
+}}
+.zs-finding .tag {{
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    background: {INK};
+    color: {PAPER};
+    padding: 3px 8px;
+    margin-right: 10px;
+    font-weight: 700;
+}}
+
+/* ---------- Tabs ---------- */
+div[data-baseweb="tab-list"] {{
+    gap: 4px;
+    border-bottom: 1px solid {LINE};
+    padding-bottom: 0;
+}}
+button[data-baseweb="tab"] {{
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    letter-spacing: 0.04em !important;
+    color: {SLATE} !important;
+    background: transparent !important;
+    padding: 12px 18px !important;
+    border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important;
+}}
+button[data-baseweb="tab"][aria-selected="true"] {{
+    color: {INK} !important;
+    border-bottom-color: {AMBER} !important;
+    background: transparent !important;
+}}
+div[data-baseweb="tab-panel"] {{
+    padding-top: 20px;
+}}
+
+/* ---------- Sidebar ---------- */
+section[data-testid="stSidebar"] {{
+    background: linear-gradient(180deg, {INK} 0%, #1A2A42 100%);
+    border-right: 1px solid {INK};
+}}
+section[data-testid="stSidebar"] * {{
+    color: {PAPER} !important;
+}}
+section[data-testid="stSidebar"] .stMarkdown h1,
+section[data-testid="stSidebar"] .stMarkdown h2,
+section[data-testid="stSidebar"] .stMarkdown h3 {{
+    color: {PAPER} !important;
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+}}
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] .stMultiSelect label {{
+    color: {GOLD_LIGHT} !important;
+    font-size: 11px !important;
+    letter-spacing: 0.18em !important;
+    text-transform: uppercase !important;
+    font-weight: 600 !important;
+}}
+.zs-sidebar-eyebrow {{
+    font-size: 10px !important;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: {AMBER} !important;
+    font-weight: 700;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}}
+.zs-sidebar-title {{
+    font-family: 'Fraunces', Georgia, serif !important;
+    font-size: 22px;
+    line-height: 1.15;
+    font-weight: 600;
+    color: {PAPER} !important;
+    margin-bottom: 16px;
+}}
+.zs-sidebar-note {{
+    font-size: 11.5px;
+    color: rgba(246, 241, 230, 0.6) !important;
+    line-height: 1.5;
+    margin-top: 18px;
+    border-top: 1px solid rgba(246,241,230,0.15);
+    padding-top: 14px;
+}}
+
+/* Multiselect styling inside the dark sidebar */
+section[data-testid="stSidebar"] div[data-baseweb="select"] > div {{
+    background-color: rgba(255,255,255,0.06) !important;
+    border-color: rgba(246,241,230,0.18) !important;
+    color: {PAPER} !important;
+}}
+section[data-testid="stSidebar"] [data-baseweb="tag"] {{
+    background-color: {AMBER} !important;
+    color: {INK} !important;
+}}
+section[data-testid="stSidebar"] [data-baseweb="tag"] span {{
+    color: {INK} !important;
+    font-weight: 600;
+}}
+section[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div > div {{
+    background-color: {AMBER} !important;
+}}
+
+/* ---------- Dataframes ---------- */
+[data-testid="stDataFrame"] {{
+    background: {PAPER};
+    border: 1px solid {LINE};
+    border-radius: 2px;
+}}
+
+/* ---------- Footer ---------- */
+.zs-footer {{
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid {LINE};
+    font-size: 11.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: {SLATE};
+    display: flex;
+    justify-content: space-between;
+}}
+
+/* Expander tweaks */
+.streamlit-expanderHeader {{
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600;
+    color: {INK};
+    background: {PAPER};
+    border: 1px solid {LINE} !important;
+    border-radius: 2px !important;
+}}
+
+/* Tighter spacing for metric rows */
+.stColumn {{ padding: 0 8px; }}
+</style>
+"""
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-def to_int(v, d=0):
-    try: return int(str(v).strip())
-    except: return d
+# ============================================================================
+#  DATA LOADING & CLEANING
+# ============================================================================
+
+DEFAULT_PATHS = [
+    "PA_Gold_Standard_Dataset_v5.xlsx",
+    "data/PA_Gold_Standard_Dataset_v5.xlsx",
+    "./PA_Gold_Standard_Dataset_v5.xlsx",
+    "/mnt/user-data/uploads/PA_Gold_Standard_Dataset_v5.xlsx",
+]
+
+SHEET_NAME = "Gold Standard"
 
 
-def enrich(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df["Policy ID"] = df["Filename"].str.replace(".pdf", "", regex=False)
-    df["Display Name"] = df.apply(lambda r: f"{r['Brand'].title()} · {r['Filename'].split('-')[0]}", axis=1)
-    df["Severity"] = df["Access Score"].apply(
-        lambda s: "critical" if s < 38 else ("warning" if s < 50 else ("monitor" if s < 62 else "success"))
-    )
-    df["Severity Label"] = df["Severity"].map({
-        "critical": "Restricted",
-        "warning": "Guarded",
-        "monitor": "At parity",
-        "success": "Preferred"
-    })
-    # Restrictiveness signals
-    df["_brand_steps"] = df["Number of Steps through Brands"].apply(lambda v: to_int(v, 0))
-    df["_generic_steps"] = df["Number of Steps through Generic"].apply(lambda v: to_int(v, 0))
-    df["_phototherapy"] = (df["Step through-Phototherapy"] == "Yes").astype(int)
-    df["_tb"] = (df["TB Test required"] == "Yes").astype(int)
-    df["_specialist"] = (~df["Specialist Types"].isin(["NA", "No", ""])).astype(int)
-    df["_qty"] = (~df["Quantity Limits"].isin(["NA", "No", ""])).astype(int)
-    df["Restriction Score"] = (
-        df["_brand_steps"] + df["_generic_steps"] +
-        df["_phototherapy"] + df["_tb"] + df["_specialist"] + df["_qty"]
-    )
-    df["Initial Auth (mo)"] = df["Initial Authorization Duration(in-months)"].apply(lambda v: to_int(v, 0))
-    df["Reauth (mo)"] = df["Reauthorization Duration(in-months)"].apply(lambda v: to_int(v, 0))
+@st.cache_data(show_spinner=False)
+def load_workbook(source) -> Optional[pd.DataFrame]:
+    """Load the gold-standard sheet from a path, uploaded file, or bytes."""
+    try:
+        df = pd.read_excel(source, sheet_name=SHEET_NAME)
+    except Exception:
+        # Fall back to first sheet if "Gold Standard" isn't present
+        df = pd.read_excel(source)
     return df
 
 
-# ============================================================
-# SIDEBAR
-# ============================================================
-with st.sidebar:
-    st.markdown("""
-    <div style='padding:0 0 0.9rem 0; border-bottom:1px solid #E5E7EB;'>
-        <div style='font-family:"Source Serif Pro",serif; font-size:1.2rem; font-weight:700; color:#111827; line-height:1.2;'>
-            Payer Policy<br/>Intelligence
-        </div>
-        <div style='font-size:0.7rem; color:#6B7280; margin-top:0.25rem;'>
-            Access quality across US Prior Authorization policies
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+def find_local_file() -> Optional[str]:
+    for p in DEFAULT_PATHS:
+        if Path(p).exists():
+            return p
+    return None
 
-    st.markdown("### Data")
-    uploaded = st.file_uploader("Upload `result.csv`", type=["csv"], label_visibility="collapsed")
 
-    df: Optional[pd.DataFrame] = None
-    if uploaded is not None:
-        df = load_csv(uploaded.getvalue())
-    else:
-        for p in ["result.csv", "outputs/result.csv"]:
-            if pathlib.Path(p).exists():
-                df = load_path(p)
-                break
+def _parse_duration(v):
+    """Parse a duration cell into a float number of months, or NaN."""
+    if pd.isna(v):
+        return np.nan
+    s = str(v).strip()
+    if s == "" or s.lower() in {"unspecified", "n/a", "na", "none", "nan"}:
+        return np.nan
+    # Pull leading number if present (e.g. "12 months" -> 12)
+    m = re.match(r"^\s*(\d+(?:\.\d+)?)", s)
+    if m:
+        try:
+            return float(m.group(1))
+        except Exception:
+            return np.nan
+    return np.nan
 
-    if df is None:
-        st.warning("Upload `result.csv` to begin.")
-        st.stop()
 
-    st.caption(f"**{len(df)}** rows · {df['Brand'].nunique()} brands · {df['Filename'].nunique()} policies")
+def _yes_no_clean(v):
+    if pd.isna(v):
+        return "Not specified"
+    s = str(v).strip().lower()
+    if s in {"yes", "y", "true"}:
+        return "Yes"
+    if s in {"no", "n", "false"}:
+        return "No"
+    return "Not specified"
 
-    st.markdown("### Filters")
-    all_brands = sorted(df["Brand"].unique())
-    f_brands = st.multiselect("Brand", all_brands, default=all_brands, label_visibility="collapsed")
-    f_score = st.slider("Access Score", 0, 100,
-                        (int(df["Access Score"].min()), int(df["Access Score"].max())))
-    f_severity = st.multiselect(
-        "Severity tier",
-        ["critical","warning","monitor","success"],
-        default=["critical","warning","monitor","success"],
-        format_func=lambda s: {"critical":"Restricted","warning":"Guarded",
-                              "monitor":"At parity","success":"Preferred"}[s],
+
+def _has_meaningful_text(v) -> bool:
+    """True if the cell contains actual policy language (not blank / 'No')."""
+    if pd.isna(v):
+        return False
+    s = str(v).strip()
+    if s == "" or s.lower() in {"no", "none", "n/a", "na", "unspecified", "not specified", "nan"}:
+        return False
+    return len(s) > 3
+
+
+def access_tier(score) -> str:
+    if pd.isna(score):
+        return "Unscored"
+    s = float(score)
+    if s <= 25:   return "Highly Restrictive"
+    if s <= 40:   return "Restricted"
+    if s <= 55:   return "Moderate"
+    if s <= 70:   return "Open"
+    return "Highly Open"
+
+
+@st.cache_data(show_spinner=False)
+def prepare(df_raw: pd.DataFrame) -> pd.DataFrame:
+    df = df_raw.copy()
+
+    # Standardize strings (handle both legacy object and pandas-3 str dtypes)
+    str_cols = [c for c in df.columns
+                if df[c].dtype == object or pd.api.types.is_string_dtype(df[c])]
+    for col in str_cols:
+        df[col] = df[col].astype(str).str.strip()
+        df[col] = df[col].replace({"nan": np.nan, "NaN": np.nan, "None": np.nan, "": np.nan})
+
+    # Pretty brand
+    if "Brand" in df.columns:
+        df["Brand"] = df["Brand"].fillna("Unknown").astype(str).str.title()
+
+    # Access Score numeric
+    df["Access Score"] = pd.to_numeric(df["Access Score"], errors="coerce")
+    df["Access Tier"]  = df["Access Score"].apply(access_tier)
+
+    # Durations
+    df["Initial Auth (months)"] = df["Initial Authorization Duration(in-months)"].apply(_parse_duration)
+    df["Reauth (months)"]       = df["Reauthorization Duration(in-months)"].apply(_parse_duration)
+
+    # Restriction flags ---------------------------------------------------
+    df["TB Test"] = df["TB Test required"].apply(_yes_no_clean)
+
+    df["Phototherapy Step"] = df["Step through-Phototherapy"].apply(_yes_no_clean)
+
+    df["Reauthorization"] = df["Reauthorization Required"].apply(
+        lambda v: "Required" if str(v).strip().lower() == "yes" else "Not specified"
     )
 
-    dfv = df[df["Brand"].isin(f_brands)
-             & df["Access Score"].between(*f_score)
-             & df["Severity"].isin(f_severity)].copy()
-    st.caption(f"`{len(dfv)} of {len(df)} match`")
+    # Quantity limit: meaningful text or "Yes"
+    def qlim_flag(v):
+        if pd.isna(v):
+            return "Not specified"
+        s = str(v).strip().lower()
+        if s in {"yes"} or len(str(v).strip()) > 10:
+            return "Yes"
+        if s == "no":
+            return "No"
+        return "Not specified"
+    df["Quantity Limit"] = df["Quantity Limits"].apply(qlim_flag)
+
+    # Step therapy presence (real policy language, not blank/no)
+    df["Step Therapy Documented"] = df["Step Therapy Requirements Documented in Policy"].apply(
+        lambda v: "Yes" if _has_meaningful_text(v) else "No / Not specified"
+    )
+
+    # Step counts -> numeric
+    df["Brand Steps"]   = pd.to_numeric(df["Number of Steps through Brands"], errors="coerce")
+    df["Generic Steps"] = pd.to_numeric(df["Number of Steps through Generic"], errors="coerce")
+    df["Total Steps"]   = df[["Brand Steps", "Generic Steps"]].sum(axis=1, min_count=1)
+
+    # Specialist
+    df["Specialist Required"] = df["Specialist Types"].apply(
+        lambda v: "Yes" if _has_meaningful_text(v) else "Not specified"
+    )
+
+    # Age
+    df["Age Criterion"] = df["Age"].fillna("Not specified")
+
+    # Policy display label
+    df["Policy ID"] = df["Filename"].astype(str).str.replace(".pdf", "", regex=False)
+
+    # Sequential policy label: stable rank by first appearance
+    unique_policies = df["Policy ID"].drop_duplicates().reset_index(drop=True)
+    policy_rank = {pid: idx + 1 for idx, pid in enumerate(unique_policies)}
+    df["Policy #"] = df["Policy ID"].map(policy_rank).apply(lambda i: f"Policy {i:02d}")
+
+    return df
 
 
-# ============================================================
-# HEADER
-# ============================================================
-n_critical = (dfv["Severity"] == "critical").sum()
-n_warning = (dfv["Severity"] == "warning").sum()
-n_monitor = (dfv["Severity"] == "monitor").sum()
-n_success = (dfv["Severity"] == "success").sum()
-avg_score = dfv["Access Score"].mean() if len(dfv) else 0
-parity_delta = avg_score - 50
+# ============================================================================
+#  ANALYSIS HELPERS
+# ============================================================================
 
-st.markdown(f"""
-<div class='headline'>
-    <span class='pre'>Payer Policy Intelligence</span>
-    <span class='pipe'>|</span>
-    {len(dfv)} policies · {dfv['Brand'].nunique()} brands ·
-    {avg_score:.1f} avg access ({abs(parity_delta):.1f} {'below' if parity_delta<0 else 'above'} FDA parity)
+RESTRICTION_FIELDS = [
+    ("Step Therapy Documented", "Yes",      "Step therapy required"),
+    ("TB Test",                  "Yes",      "TB test required"),
+    ("Quantity Limit",           "Yes",      "Quantity limits imposed"),
+    ("Specialist Required",      "Yes",      "Specialist prescriber required"),
+    ("Phototherapy Step",        "Yes",      "Phototherapy step required"),
+    ("Reauthorization",          "Required", "Reauthorization required"),
+]
+
+
+def restriction_prevalence(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    n = len(df)
+    if n == 0:
+        return pd.DataFrame(columns=["Restriction", "Count", "Share"])
+    for col, val, label in RESTRICTION_FIELDS:
+        c = int((df[col] == val).sum())
+        rows.append({"Restriction": label, "Count": c, "Share": c / n})
+    return pd.DataFrame(rows).sort_values("Share", ascending=True)
+
+
+def restriction_count_per_row(df: pd.DataFrame) -> pd.Series:
+    parts = []
+    for col, val, _ in RESTRICTION_FIELDS:
+        parts.append((df[col] == val).astype(int))
+    return sum(parts) if parts else pd.Series([0] * len(df), index=df.index)
+
+
+# ============================================================================
+#  RENDERING HELPERS
+# ============================================================================
+
+def render_masthead(df: pd.DataFrame):
+    n_policies = df["Policy ID"].nunique()
+    n_brands   = df["Brand"].nunique()
+    n_rows     = len(df)
+    st.markdown(
+        f"""
+<div class="zs-masthead">
+  <div class="zs-eyebrow">Market Access Intelligence · Plaque Psoriasis</div>
+  <h1 class="zs-title">The shape of <em>access</em> in plaque-psoriasis policies</h1>
+  <div class="zs-subtitle">
+    A consultant view of the prior-authorization signals extracted from payer policy
+    documents — quantifying how restrictively brands are managed, where utilization
+    barriers cluster, and which brands win or lose on access.
+  </div>
+  <div class="zs-meta-row">
+    <span><b>{n_policies}</b> &nbsp;policies analyzed</span>
+    <span><b>{n_brands}</b> &nbsp;brands covered</span>
+    <span><b>{n_rows}</b> &nbsp;brand-policy observations</span>
+    <span>Source · Extracted PA policy corpus</span>
+  </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
-# ============================================================
-# TABS
-# ============================================================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "Overview",
-    "Restriction Diagnostic",
-    "Brand Benchmarking",
-    "Policy Inspector",
-    "Comparative Analysis",
-    "Methodology"
+def section_header(eyebrow: str, title: str, deck: str = ""):
+    st.markdown(
+        f"""
+<div class="zs-section">
+  <div class="zs-section-eyebrow">{eyebrow}</div>
+  <h2 class="zs-section-title">{title}</h2>
+  {f'<div class="zs-section-deck">{deck}</div>' if deck else ''}
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def kpi_card(label: str, value: str, unit: str = "", foot: str = "", flavor: str = ""):
+    cls = "zs-kpi"
+    if flavor == "accent": cls += " accent"
+    if flavor == "warn":   cls += " warn"
+    st.markdown(
+        f"""
+<div class="{cls}">
+  <div class="zs-kpi-label">{label}</div>
+  <div class="zs-kpi-value">{value}<span class="zs-kpi-unit">{unit}</span></div>
+  <div class="zs-kpi-foot">{foot}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def pullquote(html: str):
+    st.markdown(f'<div class="zs-pullquote">{html}</div>', unsafe_allow_html=True)
+
+
+def caption(html: str):
+    st.markdown(f'<div class="zs-caption">{html}</div>', unsafe_allow_html=True)
+
+
+def finding(tag: str, html: str):
+    st.markdown(
+        f'<div class="zs-finding"><span class="tag">{tag}</span>{html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================================
+#  DATA INGESTION (sidebar / fallback uploader)
+# ============================================================================
+
+st.sidebar.markdown('<div class="zs-sidebar-eyebrow">ZS · Market Access</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="zs-sidebar-title">PsO Policy Lens</div>', unsafe_allow_html=True)
+
+local_path = find_local_file()
+df_raw: Optional[pd.DataFrame] = None
+if local_path is not None:
+    df_raw = load_workbook(local_path)
+else:
+    st.sidebar.markdown("##### Upload data")
+    upl = st.sidebar.file_uploader(
+        "Gold-standard extract",
+        type=["xlsx"],
+        help="Expecting the `Gold Standard` sheet from the PA extraction workbook.",
+        label_visibility="collapsed",
+    )
+    if upl is not None:
+        df_raw = load_workbook(upl)
+
+if df_raw is None:
+    render_masthead(pd.DataFrame({"Policy ID": [], "Brand": []}))
+    st.warning(
+        "No dataset found in the working directory. Upload "
+        "`PA_Gold_Standard_Dataset_v5.xlsx` from the sidebar to begin."
+    )
+    st.stop()
+
+df_all = prepare(df_raw)
+
+# ============================================================================
+#  SIDEBAR FILTERS
+# ============================================================================
+
+st.sidebar.markdown("---")
+st.sidebar.markdown('<div class="zs-sidebar-eyebrow">Refine the view</div>', unsafe_allow_html=True)
+
+brand_options = sorted(df_all["Brand"].dropna().unique().tolist())
+default_brands = brand_options  # show all by default
+
+selected_brands = st.sidebar.multiselect(
+    "Brand",
+    options=brand_options,
+    default=default_brands,
+    help="Filter to specific PsO brands.",
+)
+
+tier_options = [t for t in ACCESS_TIER_ORDER + ["Unscored"] if t in df_all["Access Tier"].unique()]
+selected_tiers = st.sidebar.multiselect(
+    "Access tier",
+    options=tier_options,
+    default=tier_options,
+)
+
+score_min, score_max = int(df_all["Access Score"].min(skipna=True) or 0), int(df_all["Access Score"].max(skipna=True) or 80)
+score_range = st.sidebar.slider(
+    "Access score range",
+    min_value=score_min, max_value=score_max,
+    value=(score_min, score_max), step=5,
+)
+
+restriction_choices = [label for _, _, label in RESTRICTION_FIELDS]
+selected_restrictions = st.sidebar.multiselect(
+    "Must include restriction",
+    options=restriction_choices,
+    default=[],
+    help="Narrow to policies that include the selected restrictions.",
+)
+
+st.sidebar.markdown(
+    f'<div class="zs-sidebar-note">'
+    f'Filters apply across all tabs. Reset by selecting all options.<br><br>'
+    f'<b>{len(df_all)}</b> total brand–policy rows · '
+    f'<b>{df_all["Policy ID"].nunique()}</b> unique policies'
+    f'</div>',
+    unsafe_allow_html=True,
+)
+
+
+# Apply filters
+mask = (
+    df_all["Brand"].isin(selected_brands) &
+    df_all["Access Tier"].isin(selected_tiers) &
+    df_all["Access Score"].between(score_range[0], score_range[1])
+)
+for label in selected_restrictions:
+    for col, val, lbl in RESTRICTION_FIELDS:
+        if lbl == label:
+            mask &= (df_all[col] == val)
+            break
+
+df = df_all[mask].copy()
+
+# ============================================================================
+#  MASTHEAD
+# ============================================================================
+
+render_masthead(df_all)
+
+if df.empty:
+    st.info("No rows match the current filter combination. Loosen filters in the sidebar to continue.")
+    st.stop()
+
+# ============================================================================
+#  TABS
+# ============================================================================
+
+tab_summary, tab_landscape, tab_brands, tab_restrictions, tab_explorer = st.tabs([
+    "Executive Summary",
+    "Access Landscape",
+    "Brand Comparison",
+    "Restriction Patterns",
+    "Policy Explorer",
 ])
 
+# ----------------------------------------------------------------------------
+#  TAB 1 — EXECUTIVE SUMMARY
+# ----------------------------------------------------------------------------
+with tab_summary:
 
-# ----------------------------------------------------------------
-# TAB 1 — OVERVIEW (dashboard grid)
-# ----------------------------------------------------------------
-with tab1:
-    # KPI STRIP
-    pct_restricted = 100 * n_critical / max(1, len(dfv))
-    pct_preferred = 100 * n_success / max(1, len(dfv))
-    st.markdown(f"""
-    <div class='kpi-strip'>
-        <div class='kpi-tile accent'>
-            <div class='kpi-label'>Policies analyzed</div>
-            <div class='kpi-value'>{len(dfv)}</div>
-            <div class='kpi-delta neutral'>{dfv['Filename'].nunique()} unique documents</div>
-        </div>
-        <div class='kpi-tile'>
-            <div class='kpi-label'>Average access score</div>
-            <div class='kpi-value'>{avg_score:.1f}</div>
-            <div class='kpi-delta {"neg" if parity_delta<0 else "pos"}'>
-                {'↓' if parity_delta<0 else '↑'} {abs(parity_delta):.1f} vs parity
-            </div>
-        </div>
-        <div class='kpi-tile critical'>
-            <div class='kpi-label'>Restricted</div>
-            <div class='kpi-value' style='color:#B92434;'>{n_critical}</div>
-            <div class='kpi-delta neg'>{pct_restricted:.0f}% of book</div>
-        </div>
-        <div class='kpi-tile warning'>
-            <div class='kpi-label'>Guarded</div>
-            <div class='kpi-value' style='color:#D97706;'>{n_warning}</div>
-            <div class='kpi-delta neutral'>{100*n_warning/max(1,len(dfv)):.0f}% of book</div>
-        </div>
-        <div class='kpi-tile success'>
-            <div class='kpi-label'>Preferred</div>
-            <div class='kpi-value' style='color:#059669;'>{n_success}</div>
-            <div class='kpi-delta pos'>{pct_preferred:.0f}% of book</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    section_header(
+        "01 · The headline",
+        "Where access stands today",
+        "A single-page brief: how restrictive plaque-psoriasis policies are on average, "
+        "which brands feel the most pressure, and what utilization-management levers payers "
+        "are pulling most often."
+    )
 
-    # CHART GRID 2x2
-    col_a, col_b = st.columns(2)
+    # ---- KPI strip ---------------------------------------------------------
+    n_policies = df["Policy ID"].nunique()
+    n_brands   = df["Brand"].nunique()
+    mean_score = df["Access Score"].mean()
+    median_score = df["Access Score"].median()
+    pct_restrictive = (df["Access Tier"].isin(["Highly Restrictive", "Restricted"])).mean() * 100
+    pct_open        = (df["Access Tier"].isin(["Open", "Highly Open"])).mean() * 100
+    avg_steps = df["Total Steps"].mean()
 
-    # CHART 1 — Score distribution histogram
-    with col_a:
-        st.markdown("<div class='chart-title'>Access score distribution</div><div class='chart-sub'>Anchors: 38 (restricted) · 50 (FDA parity) · 62 (preferred)</div>", unsafe_allow_html=True)
-        fig = go.Figure()
-        fig.add_trace(go.Histogram(
-            x=dfv["Access Score"], nbinsx=20,
-            marker=dict(color=ZS_ORANGE, line=dict(width=0)),
-            hovertemplate="Score range: %{x}<br>Policies: %{y}<extra></extra>",
-        ))
-        fig.add_vrect(x0=0, x1=38, fillcolor=COLOR_CRITICAL, opacity=0.08, line_width=0, layer="below")
-        fig.add_vrect(x0=62, x1=100, fillcolor=COLOR_SUCCESS, opacity=0.08, line_width=0, layer="below")
-        fig.add_vline(x=50, line=dict(color=TEXT_MUTED, dash="dash", width=1.5))
-        fig.add_annotation(x=50, y=1, yref="paper", text="parity",
-                          showarrow=False, yshift=8, font=dict(size=10, color=TEXT_MUTED))
-        fig = style_fig(fig, height=280)
-        fig.update_xaxes(title=None, range=[0, 100])
-        fig.update_yaxes(title="Policies")
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    most_common_restr = restriction_prevalence(df).sort_values("Share", ascending=False).iloc[0] if len(df) else None
 
-    # CHART 2 — Brand performance ranked
-    with col_b:
-        st.markdown("<div class='chart-title'>Brand performance ranking</div><div class='chart-sub'>Average access score by brand (lower = more restrictive)</div>", unsafe_allow_html=True)
-        brand_perf = (dfv.groupby("Brand", as_index=False)
-                       .agg(avg_score=("Access Score", "mean"),
-                            count=("Access Score", "size"))
-                       .sort_values("avg_score"))
-        # Color: red below parity, green above
-        brand_perf["color"] = brand_perf["avg_score"].apply(
-            lambda s: COLOR_CRITICAL if s < 38 else (COLOR_WARNING if s < 50 else (COLOR_MONITOR if s < 62 else COLOR_SUCCESS))
-        )
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            y=brand_perf["Brand"], x=brand_perf["avg_score"],
-            orientation="h",
-            marker=dict(color=brand_perf["color"]),
-            text=[f"{v:.0f}" for v in brand_perf["avg_score"]],
-            textposition="outside",
-            textfont=dict(size=10, color=TEXT_DARK),
-            customdata=brand_perf["count"],
-            hovertemplate="<b>%{y}</b><br>Avg score: %{x:.1f}<br>Policies: %{customdata}<extra></extra>",
-        ))
-        fig.add_vline(x=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
-        fig = style_fig(fig, height=max(220, 22 * len(brand_perf)))
-        fig.update_xaxes(title=None, range=[0, 100])
-        fig.update_yaxes(title=None, tickfont=dict(size=10))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    col_c, col_d = st.columns(2)
-
-    # CHART 3 — Severity donut
-    with col_c:
-        st.markdown("<div class='chart-title'>Severity composition</div><div class='chart-sub'>Distribution by access tier</div>", unsafe_allow_html=True)
-        sev_counts = pd.DataFrame({
-            "Severity": ["Restricted", "Guarded", "At parity", "Preferred"],
-            "Count": [n_critical, n_warning, n_monitor, n_success],
-            "Color": [COLOR_CRITICAL, COLOR_WARNING, COLOR_MONITOR, COLOR_SUCCESS],
-        })
-        sev_counts = sev_counts[sev_counts["Count"] > 0]
-        fig = go.Figure()
-        fig.add_trace(go.Pie(
-            labels=sev_counts["Severity"], values=sev_counts["Count"],
-            hole=0.6,
-            marker=dict(colors=sev_counts["Color"], line=dict(color="white", width=2)),
-            textinfo="label+percent",
-            textfont=dict(size=11, color="white", family="Inter"),
-            hovertemplate="<b>%{label}</b><br>Policies: %{value}<br>%{percent}<extra></extra>",
-        ))
-        fig.add_annotation(text=f"<b>{len(dfv)}</b><br><span style='font-size:0.7rem;color:#6B7280'>policies</span>",
-                          x=0.5, y=0.5, showarrow=False, font=dict(size=18, family="Inter", color=TEXT_DARK))
-        fig = style_fig(fig, height=280)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # CHART 4 — Quadrant: restrictiveness vs score
-    with col_d:
-        st.markdown("<div class='chart-title'>Friction vs access matrix</div><div class='chart-sub'>Each dot = one policy. Lower-left = poor outcome (high friction, low access)</div>", unsafe_allow_html=True)
-        # Add small jitter so coincident points are visible
-        rng = np.random.default_rng(42)
-        x_jit = dfv["Restriction Score"] + rng.uniform(-0.18, 0.18, size=len(dfv))
-        y_jit = dfv["Access Score"] + rng.uniform(-0.7, 0.7, size=len(dfv))
-        # Build color map
-        all_brands_list = sorted(df["Brand"].unique())
-        cmap = {b: BRAND_PALETTE[i % len(BRAND_PALETTE)] for i, b in enumerate(all_brands_list)}
-        colors = dfv["Brand"].map(cmap)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=x_jit, y=y_jit, mode="markers",
-            marker=dict(size=9, color=colors, opacity=0.7, line=dict(width=1, color="white")),
-            customdata=np.stack([dfv["Brand"], dfv["Policy ID"], dfv["Access Score"]], axis=-1),
-            hovertemplate="<b>%{customdata[0]}</b><br>Policy: %{customdata[1]}<br>Access: %{customdata[2]}<br>Restrictions: %{x:.0f}<extra></extra>",
-        ))
-        fig.add_hline(y=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
-        fig.add_vline(x=dfv["Restriction Score"].median(), line=dict(color=TEXT_MUTED, dash="dot", width=1))
-        fig = style_fig(fig, height=280)
-        fig.update_xaxes(title="Restriction count (steps + TB + photo + specialist + qty)")
-        fig.update_yaxes(title="Access score", range=[0, 100])
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # KEY INSIGHT
-    if len(dfv) > 0:
-        worst = dfv.loc[dfv["Access Score"].idxmin()]
-        best = dfv.loc[dfv["Access Score"].idxmax()]
-        score_range = best["Access Score"] - worst["Access Score"]
-        st.markdown(f"""
-        <div class='callout'>
-            <strong>Spread:</strong> {score_range}-point gap between most-restrictive ({worst['Brand']} · {worst['Policy ID']}, score {worst['Access Score']})
-            and most-preferred ({best['Brand']} · {best['Policy ID']}, score {best['Access Score']}) policy.
-            {n_critical + n_warning} of {len(dfv)} policies sit below FDA parity.
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown(f"<div class='footnote'>n={len(dfv)} (filename, brand) combinations · Extraction: Gemini 2.5 Flash · Access Score: deterministic rules-based (0–100)</div>", unsafe_allow_html=True)
-
-
-# ----------------------------------------------------------------
-# TAB 2 — RESTRICTION DIAGNOSTIC
-# ----------------------------------------------------------------
-with tab2:
-    # KPI strip: prevalence of each restriction
-    tot = len(dfv)
-    pct_brand_steps = 100 * (dfv["_brand_steps"] > 0).sum() / max(1, tot)
-    pct_generic_steps = 100 * (dfv["_generic_steps"] > 0).sum() / max(1, tot)
-    pct_photo = 100 * (dfv["_phototherapy"] == 1).sum() / max(1, tot)
-    pct_tb = 100 * (dfv["_tb"] == 1).sum() / max(1, tot)
-    pct_specialist = 100 * (dfv["_specialist"] == 1).sum() / max(1, tot)
-
-    st.markdown(f"""
-    <div class='kpi-strip'>
-        <div class='kpi-tile'><div class='kpi-label'>Brand step therapy</div>
-            <div class='kpi-value'>{pct_brand_steps:.0f}%</div>
-            <div class='kpi-delta neutral'>of policies</div></div>
-        <div class='kpi-tile'><div class='kpi-label'>Generic step therapy</div>
-            <div class='kpi-value'>{pct_generic_steps:.0f}%</div>
-            <div class='kpi-delta neutral'>of policies</div></div>
-        <div class='kpi-tile'><div class='kpi-label'>Phototherapy step</div>
-            <div class='kpi-value'>{pct_photo:.0f}%</div>
-            <div class='kpi-delta neutral'>of policies</div></div>
-        <div class='kpi-tile'><div class='kpi-label'>TB testing</div>
-            <div class='kpi-value'>{pct_tb:.0f}%</div>
-            <div class='kpi-delta neutral'>of policies</div></div>
-        <div class='kpi-tile'><div class='kpi-label'>Specialist required</div>
-            <div class='kpi-value'>{pct_specialist:.0f}%</div>
-            <div class='kpi-delta neutral'>of policies</div></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_a, col_b = st.columns([5, 4])
-
-    # CHART 1 — Restriction prevalence horizontal bar
-    with col_a:
-        st.markdown("<div class='chart-title'>Restriction prevalence</div><div class='chart-sub'>Share of policies imposing each access gate</div>", unsafe_allow_html=True)
-        rest_data = pd.DataFrame({
-            "Restriction": ["Brand step therapy", "Generic step therapy", "Phototherapy step",
-                           "TB testing", "Specialist required", "Quantity limits"],
-            "Pct": [pct_brand_steps, pct_generic_steps, pct_photo, pct_tb, pct_specialist,
-                    100 * (dfv["_qty"] == 1).sum() / max(1, tot)],
-        }).sort_values("Pct", ascending=True)
-        rest_data["color"] = rest_data["Pct"].apply(
-            lambda p: COLOR_CRITICAL if p > 60 else (COLOR_WARNING if p > 30 else COLOR_MONITOR)
-        )
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            y=rest_data["Restriction"], x=rest_data["Pct"], orientation="h",
-            marker=dict(color=rest_data["color"]),
-            text=[f"{v:.0f}%" for v in rest_data["Pct"]],
-            textposition="outside",
-            textfont=dict(size=10, color=TEXT_DARK),
-            hovertemplate="<b>%{y}</b><br>%{x:.0f}% of policies<extra></extra>",
-        ))
-        fig = style_fig(fig, height=260)
-        fig.update_xaxes(title="% of policies", range=[0, 110])
-        fig.update_yaxes(title=None)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # CHART 2 — Heatmap: brand × restriction
-    with col_b:
-        st.markdown("<div class='chart-title'>Restriction heatmap by brand</div><div class='chart-sub'>% of brand's policies with each restriction</div>", unsafe_allow_html=True)
-        brand_x_rest = dfv.groupby("Brand").agg(
-            brand_step=("_brand_steps", lambda s: 100 * (s > 0).mean()),
-            generic_step=("_generic_steps", lambda s: 100 * (s > 0).mean()),
-            phototherapy=("_phototherapy", lambda s: 100 * s.mean()),
-            tb=("_tb", lambda s: 100 * s.mean()),
-            specialist=("_specialist", lambda s: 100 * s.mean()),
-        ).round(0)
-        brand_x_rest = brand_x_rest.sort_index()
-        fig = go.Figure()
-        fig.add_trace(go.Heatmap(
-            z=brand_x_rest.values,
-            x=["Brand step", "Generic step", "Photo", "TB", "Specialist"],
-            y=brand_x_rest.index,
-            colorscale=[[0, "#F9FAFB"], [0.5, "#FDB97A"], [1, COLOR_CRITICAL]],
-            zmin=0, zmax=100,
-            showscale=True,
-            colorbar=dict(thickness=10, tickfont=dict(size=9), title=None, len=0.6),
-            text=brand_x_rest.values.astype(int),
-            texttemplate="%{text}",
-            textfont=dict(size=9, family="Inter"),
-            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.0f}%<extra></extra>",
-        ))
-        fig = style_fig(fig, height=max(220, 18 * len(brand_x_rest)))
-        fig.update_xaxes(side="top", tickfont=dict(size=10))
-        fig.update_yaxes(tickfont=dict(size=10))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # Bottom: top friction policies and stacked-bar
-    col_c, col_d = st.columns(2)
-
-    with col_c:
-        st.markdown("<div class='chart-title'>Most restrictive policies</div><div class='chart-sub'>Top 10 by restriction count</div>", unsafe_allow_html=True)
-        top_rest = dfv.nlargest(10, "Restriction Score")[["Policy ID", "Brand", "Restriction Score", "Access Score"]].copy()
-        top_rest["label"] = top_rest["Brand"].str.slice(0, 8) + " · " + top_rest["Policy ID"].str.slice(0, 12)
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            y=top_rest["label"][::-1], x=top_rest["Restriction Score"][::-1],
-            orientation="h",
-            marker=dict(color=top_rest["Access Score"][::-1],
-                       colorscale=[[0, COLOR_CRITICAL], [0.5, COLOR_WARNING], [1, COLOR_SUCCESS]],
-                       cmin=0, cmax=100,
-                       showscale=False),
-            text=[f"{v:.0f}" for v in top_rest["Restriction Score"][::-1]],
-            textposition="outside",
-            textfont=dict(size=10, color=TEXT_DARK),
-            customdata=top_rest["Access Score"][::-1],
-            hovertemplate="<b>%{y}</b><br>Restrictions: %{x}<br>Access score: %{customdata}<extra></extra>",
-        ))
-        fig = style_fig(fig, height=320)
-        fig.update_xaxes(title="Restriction count")
-        fig.update_yaxes(title=None, tickfont=dict(size=9))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    with col_d:
-        st.markdown("<div class='chart-title'>Auth duration distribution</div><div class='chart-sub'>Initial vs reauthorization periods</div>", unsafe_allow_html=True)
-        ia = dfv["Initial Auth (mo)"].replace(0, np.nan).dropna()
-        rr = dfv["Reauth (mo)"].replace(0, np.nan).dropna()
-        fig = go.Figure()
-        if len(ia):
-            fig.add_trace(go.Histogram(x=ia, name="Initial",
-                                       marker=dict(color=ZS_ORANGE, opacity=0.75),
-                                       nbinsx=12,
-                                       hovertemplate="Initial: %{x} mo<br>%{y} policies<extra></extra>"))
-        if len(rr):
-            fig.add_trace(go.Histogram(x=rr, name="Reauth",
-                                       marker=dict(color=ZS_NAVY, opacity=0.75),
-                                       nbinsx=12,
-                                       hovertemplate="Reauth: %{x} mo<br>%{y} policies<extra></extra>"))
-        fig = style_fig(fig, height=320, showlegend=True)
-        fig.update_xaxes(title="Months")
-        fig.update_yaxes(title="Policies")
-        fig.update_layout(barmode="overlay")
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # CALLOUT
-    top_friction = rest_data.iloc[-1]
-    st.markdown(f"""
-    <div class='callout'>
-        <strong>Lead driver of friction:</strong> {top_friction['Restriction'].lower()} appears in {top_friction['Pct']:.0f}% of policies.
-        Reducing it would shift the score distribution upward by ~3-5 points per policy.
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown(f"<div class='footnote'>Restriction count = brand steps + generic steps + (1 each for phototherapy, TB, specialist, quantity limits) · n={len(dfv)}</div>", unsafe_allow_html=True)
-
-
-# ----------------------------------------------------------------
-# TAB 3 — BRAND BENCHMARKING (interactive: pick a brand)
-# ----------------------------------------------------------------
-with tab3:
-    brands_list = sorted(dfv["Brand"].unique())
-    if not brands_list:
-        st.info("No brands match the current filters.")
-    else:
-        # Brand selector at top
-        focus_brand = st.radio(
-            "Focus brand",
-            options=brands_list,
-            horizontal=True,
-            label_visibility="collapsed",
-            key="brand_focus"
-        )
-
-        focus_df = dfv[dfv["Brand"] == focus_brand]
-        others_df = dfv[dfv["Brand"] != focus_brand]
-
-        focus_avg = focus_df["Access Score"].mean() if len(focus_df) else 0
-        others_avg = others_df["Access Score"].mean() if len(others_df) else 0
-        delta_vs_market = focus_avg - others_avg
-
-        # KPI strip for focus brand
-        st.markdown(f"""
-        <div class='kpi-strip'>
-            <div class='kpi-tile accent'>
-                <div class='kpi-label'>{focus_brand} policies</div>
-                <div class='kpi-value'>{len(focus_df)}</div>
-                <div class='kpi-delta neutral'>{focus_df['Filename'].nunique()} unique documents</div>
-            </div>
-            <div class='kpi-tile'>
-                <div class='kpi-label'>Avg access score</div>
-                <div class='kpi-value'>{focus_avg:.1f}</div>
-                <div class='kpi-delta {"pos" if delta_vs_market>=0 else "neg"}'>
-                    {'↑' if delta_vs_market>=0 else '↓'} {abs(delta_vs_market):.1f} vs other brands
-                </div>
-            </div>
-            <div class='kpi-tile'>
-                <div class='kpi-label'>vs FDA parity</div>
-                <div class='kpi-value'>{focus_avg-50:+.1f}</div>
-                <div class='kpi-delta {"pos" if focus_avg>=50 else "neg"}'>
-                    {'above' if focus_avg>=50 else 'below'} 50
-                </div>
-            </div>
-            <div class='kpi-tile critical'>
-                <div class='kpi-label'>Restricted</div>
-                <div class='kpi-value' style='color:#B92434;'>{(focus_df['Severity']=='critical').sum()}</div>
-                <div class='kpi-delta neg'>{100*(focus_df['Severity']=='critical').sum()/max(1,len(focus_df)):.0f}% of brand book</div>
-            </div>
-            <div class='kpi-tile success'>
-                <div class='kpi-label'>Preferred</div>
-                <div class='kpi-value' style='color:#059669;'>{(focus_df['Severity']=='success').sum()}</div>
-                <div class='kpi-delta pos'>{100*(focus_df['Severity']=='success').sum()/max(1,len(focus_df)):.0f}% of brand book</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # 2 columns of charts
-        col_a, col_b = st.columns(2)
-
-        # CHART 1 — Distribution overlay: brand vs all
-        with col_a:
-            st.markdown(f"<div class='chart-title'>{focus_brand} vs market distribution</div><div class='chart-sub'>Density of access scores</div>", unsafe_allow_html=True)
-            fig = go.Figure()
-            if len(others_df):
-                fig.add_trace(go.Histogram(
-                    x=others_df["Access Score"], name="Other brands",
-                    marker=dict(color="#D1D5DB"), opacity=0.6, nbinsx=20,
-                    histnorm="probability density",
-                    hovertemplate="Other brands<br>Score: %{x}<extra></extra>",
-                ))
-            fig.add_trace(go.Histogram(
-                x=focus_df["Access Score"], name=focus_brand,
-                marker=dict(color=ZS_ORANGE), opacity=0.85, nbinsx=20,
-                histnorm="probability density",
-                hovertemplate=f"{focus_brand}<br>Score: %{{x}}<extra></extra>",
-            ))
-            fig.add_vline(x=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
-            fig = style_fig(fig, height=280, showlegend=True)
-            fig.update_xaxes(title="Access score", range=[0, 100])
-            fig.update_yaxes(title="Density")
-            fig.update_layout(barmode="overlay")
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-        # CHART 2 — Restriction profile radar
-        with col_b:
-            st.markdown(f"<div class='chart-title'>{focus_brand} restriction profile</div><div class='chart-sub'>% of brand policies with each restriction (vs market)</div>", unsafe_allow_html=True)
-            axes = ["Brand step", "Generic step", "Photo", "TB", "Specialist", "Qty"]
-            def profile(d):
-                if not len(d): return [0]*6
-                return [
-                    100 * (d["_brand_steps"]>0).mean(),
-                    100 * (d["_generic_steps"]>0).mean(),
-                    100 * (d["_phototherapy"]==1).mean(),
-                    100 * (d["_tb"]==1).mean(),
-                    100 * (d["_specialist"]==1).mean(),
-                    100 * (d["_qty"]==1).mean(),
-                ]
-            focus_prof = profile(focus_df)
-            other_prof = profile(others_df)
-
-            fig = go.Figure()
-            if len(others_df):
-                fig.add_trace(go.Scatterpolar(
-                    r=other_prof + [other_prof[0]],
-                    theta=axes + [axes[0]],
-                    fill="toself", name="Other brands",
-                    line=dict(color="#9CA3AF", width=2),
-                    fillcolor="rgba(156,163,175,0.2)",
-                ))
-            fig.add_trace(go.Scatterpolar(
-                r=focus_prof + [focus_prof[0]],
-                theta=axes + [axes[0]],
-                fill="toself", name=focus_brand,
-                line=dict(color=ZS_ORANGE, width=2),
-                fillcolor="rgba(255,107,53,0.3)",
-            ))
-            fig.update_layout(
-                polar=dict(
-                    radialaxis=dict(range=[0, 100], tickfont=dict(size=9, color=TEXT_MUTED),
-                                   gridcolor="#E5E7EB", linecolor="#E5E7EB"),
-                    angularaxis=dict(tickfont=dict(size=10, color=TEXT_DARK), gridcolor="#E5E7EB"),
-                ),
-                height=300,
-                font=dict(family="Inter"),
-                margin=dict(t=20, b=20, l=30, r=30),
-                paper_bgcolor="white",
-                showlegend=True,
-                legend=dict(orientation="h", y=-0.15, font=dict(size=10)),
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-        # CHART 3 — Brand's policies ranked by access
-        st.markdown(f"<div class='chart-title'>{focus_brand} policies ranked by access score</div><div class='chart-sub'>Click bar to identify policy</div>", unsafe_allow_html=True)
-        ranked = focus_df.sort_values("Access Score").copy()
-        ranked["color"] = ranked["Severity"].map({
-            "critical": COLOR_CRITICAL, "warning": COLOR_WARNING,
-            "monitor": COLOR_MONITOR, "success": COLOR_SUCCESS
-        })
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=ranked["Policy ID"], y=ranked["Access Score"],
-            marker=dict(color=ranked["color"]),
-            text=[f"{v}" for v in ranked["Access Score"]],
-            textposition="outside",
-            textfont=dict(size=9, color=TEXT_DARK),
-            customdata=ranked["Severity Label"],
-            hovertemplate="<b>Policy %{x}</b><br>Score: %{y}<br>Tier: %{customdata}<extra></extra>",
-        ))
-        fig.add_hline(y=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
-        fig = style_fig(fig, height=300)
-        fig.update_xaxes(title=None, tickangle=-45, tickfont=dict(size=8))
-        fig.update_yaxes(title="Access score", range=[0, 100])
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-        # Smart callout
-        peers = others_df.groupby("Brand")["Access Score"].mean()
-        if len(peers):
-            rank = (peers < focus_avg).sum() + 1
-            n_brands = peers.size + 1
-            comparison_text = f"rank <strong>{rank} of {n_brands}</strong>"
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        kpi_card("Mean access score", f"{mean_score:.1f}", "/ 80",
+                 f"Median {median_score:.0f} · range 0–80")
+    with c2:
+        kpi_card("Restrictive share", f"{pct_restrictive:.0f}", "%",
+                 "Policies scoring ≤ 40 — meaningful barriers to start", flavor="warn")
+    with c3:
+        kpi_card("Open-access share", f"{pct_open:.0f}", "%",
+                 "Policies scoring > 55 — favorable terms", flavor="accent")
+    with c4:
+        kpi_card("Avg step-therapy hurdles", f"{avg_steps:.1f}" if pd.notna(avg_steps) else "—",
+                 " steps", "Across brand + generic steps")
+    with c5:
+        if most_common_restr is not None:
+            kpi_card("Most common UM lever",
+                     f"{most_common_restr['Share']*100:.0f}",
+                     "%",
+                     f"{most_common_restr['Restriction']}")
         else:
-            comparison_text = "only brand in view"
+            kpi_card("Most common UM lever", "—", "", "")
 
-        st.markdown(f"""
-        <div class='callout'>
-            <strong>{focus_brand}:</strong> {comparison_text} on average access ({focus_avg:.1f} vs market avg {others_avg:.1f}).
-            Profile shows {'higher' if delta_vs_market<0 else 'lower'} friction than peers across {sum(1 for a,b in zip(focus_prof,other_prof) if a>b)}/6 restriction categories.
-        </div>
-        """, unsafe_allow_html=True)
+    # ---- Headline narrative ------------------------------------------------
+    # Pick a real, data-driven pullquote
+    top_brand_by_count = df.groupby("Brand")["Policy ID"].nunique().sort_values(ascending=False)
+    leading_brand = top_brand_by_count.index[0] if len(top_brand_by_count) else "—"
 
-
-# ----------------------------------------------------------------
-# TAB 4 — POLICY INSPECTOR (drill-down)
-# ----------------------------------------------------------------
-with tab4:
-    if not len(dfv):
-        st.info("No policies match the current filters.")
+    brand_means = df.groupby("Brand")["Access Score"].mean().dropna()
+    qualifying = df.groupby("Brand").size()
+    brand_means = brand_means[qualifying.reindex(brand_means.index).fillna(0) >= 3]
+    if len(brand_means) >= 2:
+        most_restricted_brand = brand_means.idxmin()
+        most_open_brand       = brand_means.idxmax()
+        gap = brand_means.max() - brand_means.min()
+        gap_line = (f"<strong>{most_open_brand}</strong> enjoys the most favorable terms "
+                    f"({brand_means.max():.0f}), while <strong>{most_restricted_brand}</strong> "
+                    f"faces the tightest ({brand_means.min():.0f}) — a "
+                    f"<strong>{gap:.0f}-point</strong> access gap.")
     else:
-        df_v = dfv.reset_index(drop=True).copy()
-        df_v["__key"] = df_v["Display Name"] + "  (" + df_v["Filename"] + ")"
-        sel = st.selectbox("Policy", options=df_v["__key"].tolist(), label_visibility="collapsed")
-        row = df_v[df_v["__key"] == sel].iloc[0]
-        sev = row["Severity"]
-        sev_label = row["Severity Label"]
+        gap_line = "Brand-level coverage volume is uneven; comparable means require ≥ 3 policies per brand."
 
-        # Header band
-        st.markdown(f"""
-        <div style='background:#111827; border-radius:4px; padding:0.9rem 1.2rem; margin-bottom:0.8rem;'>
-            <div style='display:flex; gap:0.5rem; align-items:center; margin-bottom:0.4rem;'>
-                <span class='badge badge-{sev}'>{sev_label}</span>
-                <span style='color:#FF6B35; font-weight:600; font-size:0.85rem;'>{row['Brand']}</span>
-                <span style='color:#9CA3AF; font-size:0.78rem;'>· Policy {row['Policy ID']}</span>
-            </div>
-            <div style='font-family:"Source Serif Pro",serif; font-size:1.25rem; color:#FFFFFF; font-weight:600; line-height:1.3;'>
-                Access Score <span style='color:#FF6B35;'>{row['Access Score']}</span>
-                · {abs(row['Access Score']-50)} pts {"below" if row['Access Score']<50 else "above"} FDA parity
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    pullquote(
+        f"The market-access picture is <strong>tilted toward restriction</strong>: "
+        f"the typical PsO policy scores <strong>{mean_score:.0f}/80</strong>, with "
+        f"<strong>{pct_restrictive:.0f}%</strong> of policies imposing meaningful step-therapy or "
+        f"utilization barriers. {gap_line}"
+    )
 
-        # KPI strip + waterfall chart together
-        brand_avg = df[df["Brand"] == row["Brand"]]["Access Score"].mean()
-        all_avg = df["Access Score"].mean()
-        pct_within_brand = int((df[df["Brand"] == row["Brand"]]["Access Score"] <= row["Access Score"]).mean() * 100)
+    # ---- The big-picture chart: access score distribution by tier ---------
+    section_header(
+        "02 · The access curve",
+        "How policy access scores are distributed",
+        "Each bar is a five-point bin of policy access scores. The color tells the access tier; "
+        "the shape of the distribution tells the story."
+    )
 
-        st.markdown(f"""
-        <div class='kpi-strip' style='grid-template-columns: repeat(4, 1fr);'>
-            <div class='kpi-tile accent'>
-                <div class='kpi-label'>vs Brand average</div>
-                <div class='kpi-value'>{row['Access Score']}</div>
-                <div class='kpi-delta {"pos" if row['Access Score']>=brand_avg else "neg"}'>
-                    {row['Access Score']-brand_avg:+.1f} vs {brand_avg:.1f}
-                </div>
-            </div>
-            <div class='kpi-tile'>
-                <div class='kpi-label'>vs Overall average</div>
-                <div class='kpi-value'>{row['Access Score']}</div>
-                <div class='kpi-delta {"pos" if row['Access Score']>=all_avg else "neg"}'>
-                    {row['Access Score']-all_avg:+.1f} vs {all_avg:.1f}
-                </div>
-            </div>
-            <div class='kpi-tile'>
-                <div class='kpi-label'>Brand percentile</div>
-                <div class='kpi-value'>{pct_within_brand}</div>
-                <div class='kpi-delta neutral'>of {row['Brand']} policies</div>
-            </div>
-            <div class='kpi-tile'>
-                <div class='kpi-label'>Restriction count</div>
-                <div class='kpi-value'>{int(row['Restriction Score'])}</div>
-                <div class='kpi-delta neutral'>access gates imposed</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Build histogram
+    df_hist = df.dropna(subset=["Access Score"]).copy()
+    df_hist["Bin"] = pd.cut(df_hist["Access Score"], bins=np.arange(0, 86, 5), right=False)
+    df_hist["BinCenter"] = df_hist["Bin"].apply(lambda b: b.left + 2.5 if pd.notna(b) else np.nan)
+    hist_data = (
+        df_hist.groupby(["BinCenter", "Access Tier"])
+        .size()
+        .reset_index(name="Count")
+    )
 
-        col_a, col_b = st.columns([5, 4])
+    fig_hist = px.bar(
+        hist_data,
+        x="BinCenter", y="Count",
+        color="Access Tier",
+        color_discrete_map=ACCESS_TIER_COLOR,
+        category_orders={"Access Tier": ACCESS_TIER_ORDER},
+    )
+    fig_hist.update_traces(marker_line_width=0)
+    apply_layout(fig_hist,
+                xaxis_title="Access Score (0 = most restrictive, 80 = most open)",
+        yaxis_title="Number of policies",
+        bargap=0.18,
+        height=380,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                    font=dict(size=12, color=INK_SOFT)),
+    )
+    fig_hist.add_vline(x=mean_score, line_dash="dot", line_color=INK,
+                       annotation_text=f"  Mean {mean_score:.1f}",
+                       annotation_position="top right",
+                       annotation_font_color=INK,
+                       annotation_font_size=12)
+    st.plotly_chart(fig_hist, use_container_width=True, config={"displayModeBar": False})
 
-        # Waterfall chart of score calculation
-        with col_a:
-            st.markdown("<div class='chart-title'>Score breakdown</div><div class='chart-sub'>How each parameter shifts the score from FDA parity baseline of 50</div>", unsafe_allow_html=True)
+    caption(
+        "Read the curve: a left-skewed distribution would suggest payers are tightening access; "
+        "a right-skewed one would signal accommodation. The current shape clusters around the "
+        "moderate-to-restricted bands, with a notable tail of highly restrictive policies."
+    )
 
-            deductions = []
-            additions = []
-            bs = to_int(row["Number of Steps through Brands"], 0)
-            gs = to_int(row["Number of Steps through Generic"], 0)
-            if bs > 0: deductions.append((f"Brand step × {bs}", -5.0 * min(bs, 5)))
-            if gs > 0: deductions.append((f"Generic step × {gs}", -2.5 * min(gs, 5)))
-            if row["Step through-Phototherapy"] == "Yes": deductions.append(("Phototherapy", -5.0))
-            if row["TB Test required"] == "Yes": deductions.append(("TB testing", -3.5))
-            spec = str(row["Specialist Types"])
-            if spec not in ("NA","No",""):
-                n_sp = len([s for s in spec.split(";") if s.strip()])
-                deductions.append((f"Specialist ({n_sp})", -3.5 if n_sp<=1 else (-2.5 if n_sp<=2 else -1.5)))
-            if str(row["Quantity Limits"]) not in ("No","NA",""):
-                deductions.append(("Quantity limit", -2.0))
-            ia = to_int(row["Initial Authorization Duration(in-months)"])
-            if ia >= 12: additions.append(("Initial auth ≥12mo", 6.0))
-            elif ia >= 6: additions.append((f"Initial auth {ia}mo", 2.0))
-            elif 0<ia<6: deductions.append((f"Short auth ({ia}mo)", -3.0))
-            rd = to_int(row["Reauthorization Duration(in-months)"])
-            if rd >= 12: additions.append(("Reauth ≥12mo", 4.0))
-            elif rd >= 6: additions.append((f"Reauth {rd}mo", 1.0))
-            elif 0<rd<6: deductions.append((f"Short reauth ({rd}mo)", -2.0))
-            if row["Reauthorization Required"] == "No": additions.append(("No reauth required", 3.0))
-
-            # Build waterfall sequence
-            labels = ["FDA parity"] + [d[0] for d in deductions] + [a[0] for a in additions] + ["Final"]
-            measures = ["absolute"] + ["relative"]*(len(deductions)+len(additions)) + ["total"]
-            values = [50] + [d[1] for d in deductions] + [a[1] for a in additions] + [None]
-
-            fig = go.Figure(go.Waterfall(
-                x=labels, y=values, measure=measures,
-                connector=dict(line=dict(color="#D1D5DB", width=1)),
-                decreasing=dict(marker=dict(color=COLOR_CRITICAL)),
-                increasing=dict(marker=dict(color=COLOR_SUCCESS)),
-                totals=dict(marker=dict(color=ZS_ORANGE)),
-                text=[f"{v:+.1f}" if isinstance(v,(int,float)) and m=="relative" else (f"{int(v)}" if v else f"{int(row['Access Score'])}") for v,m in zip(values,measures)],
-                textposition="outside",
-                textfont=dict(size=10, color=TEXT_DARK),
-            ))
-            fig = style_fig(fig, height=320)
-            fig.update_xaxes(title=None, tickangle=-30, tickfont=dict(size=9))
-            fig.update_yaxes(title="Score points", range=[0, 70])
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-        # Parameter grid (compact)
-        with col_b:
-            st.markdown("<div class='chart-title'>Parameter detail</div><div class='chart-sub'>Extracted values</div>", unsafe_allow_html=True)
-            params = [
-                ("Age", row["Age"], None),
-                ("Brand steps", row["Number of Steps through Brands"], "step"),
-                ("Generic steps", row["Number of Steps through Generic"], "step"),
-                ("Phototherapy", row["Step through-Phototherapy"], "yesno_bad"),
-                ("TB test", row["TB Test required"], "yesno_bad"),
-                ("Specialist", row["Specialist Types"], None),
-                ("Quantity limit", row["Quantity Limits"], None),
-                ("Initial auth (mo)", row["Initial Authorization Duration(in-months)"], "month"),
-                ("Reauth (mo)", row["Reauthorization Duration(in-months)"], "month"),
-                ("Reauth required", row["Reauthorization Required"], None),
-            ]
-            html = "<div style='border:1px solid #E5E7EB; border-radius:4px; overflow:hidden;'>"
-            for label, val, kind in params:
-                vs = str(val)
-                color = TEXT_DARK
-                if kind == "yesno_bad":
-                    color = COLOR_CRITICAL if vs == "Yes" else (COLOR_SUCCESS if vs == "No" else TEXT_MUTED)
-                elif kind == "step" and vs.isdigit() and int(vs) > 0:
-                    color = COLOR_CRITICAL
-                elif kind == "step" and vs in ("No", "0"):
-                    color = COLOR_SUCCESS
-                elif kind == "month":
-                    try:
-                        n = int(vs); color = COLOR_SUCCESS if n>=12 else (COLOR_WARNING if n>=6 else COLOR_CRITICAL)
-                    except: color = TEXT_MUTED
-                html += f"""
-                <div style='display:flex; justify-content:space-between; padding:0.35rem 0.7rem;
-                            border-bottom:1px dashed #F3F4F6; font-size:0.83rem;'>
-                    <span style='color:{TEXT_MUTED};'>{label}</span>
-                    <span style='color:{color}; font-weight:600;'>{vs[:40]}</span>
-                </div>"""
-            html += "</div>"
-            st.markdown(html, unsafe_allow_html=True)
-
-        # Expandable verbatim language
-        with st.expander("Verbatim policy language", expanded=False):
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                st.markdown("**Step therapy requirements**")
-                st.caption(row["Step Therapy Requirements Documented in Policy"])
-            with cc2:
-                st.markdown("**Reauthorization requirements**")
-                st.caption(row["Reauthorization Requirements Documented in Policy"])
-
-
-# ----------------------------------------------------------------
-# TAB 5 — COMPARATIVE ANALYSIS (was: Side-by-Side Compare)
-# ----------------------------------------------------------------
-with tab5:
-    if len(dfv) < 2:
-        st.info("Need at least 2 policies in the filter to compare.")
-    else:
-        df_v = dfv.reset_index(drop=True).copy()
-        df_v["__key"] = df_v["Display Name"] + "  (" + df_v["Filename"] + ")"
-        picked_keys = st.multiselect(
-            "Select 2–4 policies for comparison",
-            df_v["__key"].tolist(),
-            default=df_v["__key"].tolist()[:2],
-            max_selections=4,
-        )
-
-        if len(picked_keys) >= 2:
-            picked = df_v[df_v["__key"].isin(picked_keys)].copy()
-            picked["short"] = picked.apply(lambda r: f"{r['Brand'][:8]} · {r['Policy ID'][:10]}", axis=1)
-
-            col_a, col_b = st.columns([5, 4])
-
-            # CHART 1 — Bar chart of access scores side-by-side
-            with col_a:
-                st.markdown("<div class='chart-title'>Access score comparison</div><div class='chart-sub'>Selected policies</div>", unsafe_allow_html=True)
-                colors = picked["Severity"].map({
-                    "critical": COLOR_CRITICAL, "warning": COLOR_WARNING,
-                    "monitor": COLOR_MONITOR, "success": COLOR_SUCCESS
-                })
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=picked["short"], y=picked["Access Score"],
-                    marker=dict(color=colors),
-                    text=picked["Access Score"], textposition="outside",
-                    textfont=dict(size=11, color=TEXT_DARK),
-                ))
-                fig.add_hline(y=50, line=dict(color=TEXT_MUTED, dash="dash", width=1))
-                fig = style_fig(fig, height=270)
-                fig.update_yaxes(title="Access score", range=[0, 100])
-                fig.update_xaxes(title=None, tickfont=dict(size=10))
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-            # CHART 2 — Radar overlay
-            with col_b:
-                st.markdown("<div class='chart-title'>Restriction profile overlay</div><div class='chart-sub'>Normalized 0–1 by restriction category</div>", unsafe_allow_html=True)
-                axes = ["Brand step", "Generic step", "Photo", "TB", "Specialist", "Qty"]
-                fig = go.Figure()
-                colors_radar = [ZS_ORANGE, ZS_NAVY, COLOR_SUCCESS, "#7C3AED"]
-                for i, (_, r) in enumerate(picked.iterrows()):
-                    vals = [
-                        min(r["_brand_steps"]/5, 1),
-                        min(r["_generic_steps"]/5, 1),
-                        r["_phototherapy"],
-                        r["_tb"],
-                        r["_specialist"],
-                        r["_qty"],
-                    ]
-                    fig.add_trace(go.Scatterpolar(
-                        r=vals + [vals[0]],
-                        theta=axes + [axes[0]],
-                        fill="toself", name=r["short"],
-                        line=dict(color=colors_radar[i % 4], width=2),
-                        fillcolor=colors_radar[i % 4],
-                        opacity=0.35,
-                    ))
-                fig.update_layout(
-                    polar=dict(radialaxis=dict(range=[0,1], tickfont=dict(size=8), gridcolor="#E5E7EB"),
-                              angularaxis=dict(tickfont=dict(size=10), gridcolor="#E5E7EB")),
-                    height=290,
-                    font=dict(family="Inter"),
-                    margin=dict(t=10, b=10, l=30, r=30),
-                    paper_bgcolor="white",
-                    showlegend=True,
-                    legend=dict(orientation="h", y=-0.1, font=dict(size=9)),
-                )
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-            # Diff table — visual
-            st.markdown("<div class='chart-title'>Parameter-by-parameter</div><div class='chart-sub'>Differences highlighted</div>", unsafe_allow_html=True)
-            display_cols = ["Brand", "Access Score", "Age",
-                "Number of Steps through Brands", "Number of Steps through Generic",
-                "Step through-Phototherapy", "TB Test required", "Quantity Limits",
-                "Specialist Types",
-                "Initial Authorization Duration(in-months)",
-                "Reauthorization Duration(in-months)",
-                "Reauthorization Required"]
-            comp = picked.set_index("short")[display_cols].astype(str).T
-            def diff_style(r):
-                vals = [str(v).strip() for v in r.values]
-                if len(set(vals)) > 1:
-                    return ["background-color:#FFF8F2; color:#111827; font-weight:500;"] * len(r)
-                return ["color:#9CA3AF;"] * len(r)
-            st.dataframe(comp.style.apply(diff_style, axis=1), use_container_width=True, height=440)
-
-            # Summary
-            n_diff = sum(1 for col in comp.index if len(set(str(v).strip() for v in comp.loc[col].values)) > 1)
-            st.markdown(f"""
-            <div class='callout'>
-                <strong>{n_diff} of {len(comp)} parameters</strong> differ across the {len(picked_keys)} selected policies.
-                Highlighted rows show where these policies diverge.
-            </div>
-            """, unsafe_allow_html=True)
-
-
-# ----------------------------------------------------------------
-# TAB 6 — METHODOLOGY (compact)
-# ----------------------------------------------------------------
-with tab6:
-    col_a, col_b = st.columns([3, 2])
+    # ---- Two-column: restriction prevalence + tier mix ---------------------
+    col_a, col_b = st.columns([1.2, 1.0], gap="large")
 
     with col_a:
-        st.markdown("""
-        ##### Pipeline
-
-        | Stage | Process |
-        |---|---|
-        | 1 | PDF text extraction (pdfplumber + pdftotext fallback, hash-cached) |
-        | 2 | Hierarchical brand scoping with cross-brand negative filtering |
-        | 3 | Brand-stratified few-shot retrieval (2 same-brand + 1 cross-brand, from 439 gold rows) |
-        | 4 | Gemini 2.5 Flash extraction with Pydantic schema enforcement |
-        | 5 | 3-layer validation: formatting → business rules → contradiction detection |
-        | 6 | Deterministic Access Score (monotonic rules-based, 0–100) |
-
-        ##### Design priorities
-
-        - **Deterministic scoring** for reproducibility — no LLM variance in the final score
-        - **Evidence-grounded extraction** — every value backed by a verbatim policy quote
-        - **3-layer validation** — formatting + cross-field rules + keyword-based contradiction detection
-        - **Hash-cached at every stage** — iteration is free, reviewers reproduce exactly
-        """)
+        section_header(
+            "03 · Payer toolkit",
+            "Which utilization levers appear most often",
+            "Share of policies imposing each type of restriction."
+        )
+        rp = restriction_prevalence(df)
+        fig_rp = go.Figure()
+        fig_rp.add_trace(go.Bar(
+            y=rp["Restriction"],
+            x=rp["Share"] * 100,
+            orientation="h",
+            marker=dict(color=AMBER, line=dict(color=AMBER_DEEP, width=0.5)),
+            hovertemplate="<b>%{y}</b><br>%{x:.0f}%% of policies<extra></extra>",
+            text=[f"{v*100:.0f}%" for v in rp["Share"]],
+            textposition="outside",
+            textfont=dict(color=INK, size=12),
+        ))
+        apply_layout(fig_rp,
+                        height=320,
+            xaxis_title="% of policies", yaxis_title="",
+            xaxis=dict(range=[0, max(105, rp["Share"].max()*100 + 15)],
+                       showgrid=False, ticksuffix="%", linecolor=LINE),
+            showlegend=False,
+        )
+        st.plotly_chart(fig_rp, use_container_width=True, config={"displayModeBar": False})
 
     with col_b:
-        # Access Score anchor table
-        st.markdown("##### Access Score calibration")
-        anchors = pd.DataFrame({
-            "Anchor": [0, 25, 50, 75, 100],
-            "Label": ["No access", "Restricted", "FDA parity", "Preferred", "Best possible"],
-            "Reference": [
-                "Drug excluded from formulary",
-                "3 brand steps + TB + specialty + age + 6mo auth",
-                "Mirrors FDA label",
-                "No steps, 12mo auth, broad eligibility",
-                "No restrictions"
-            ],
-        })
-        st.dataframe(anchors, use_container_width=True, hide_index=True, height=240)
+        section_header(
+            "04 · The mix",
+            "Access tier composition",
+            "Where the corpus sits on the restriction spectrum."
+        )
+        tier_counts = df["Access Tier"].value_counts().reindex(
+            ACCESS_TIER_ORDER + ["Unscored"]).dropna()
+        fig_donut = go.Figure(go.Pie(
+            labels=tier_counts.index,
+            values=tier_counts.values,
+            hole=0.62,
+            marker=dict(colors=[ACCESS_TIER_COLOR.get(t, SLATE) for t in tier_counts.index],
+                        line=dict(color=PAPER, width=2)),
+            textinfo="percent",
+            textfont=dict(color=PAPER, size=13, family="Manrope"),
+            hovertemplate="<b>%{label}</b><br>%{value} policies (%{percent})<extra></extra>",
+            sort=False,
+        ))
+        apply_layout(
+            fig_donut,
+            height=320,
+            showlegend=True,
+            legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.05,
+                        font=dict(size=12, color=INK_SOFT)),
+            annotations=[dict(
+                text=f"<b>{len(df)}</b><br><span style='font-size:11px;color:{SLATE}'>obs</span>",
+                x=0.5, y=0.5, font=dict(family="Fraunces", size=22, color=INK),
+                showarrow=False,
+            )],
+        )
+        st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
-        st.markdown("""
-        <div class='callout'>
-            <strong>Note:</strong> Anchors are reference points on a continuous 0–100 scale, not bucketed outputs.
-            Real policies score anywhere on the scale.
-        </div>
-        """, unsafe_allow_html=True)
 
-    st.markdown(f"<div class='footnote'>Pipeline run: {pd.Timestamp.now().strftime('%Y-%m-%d')} · n={len(dfv)} (filename, brand) rows in current view · Built for the H1'26 hackathon</div>", unsafe_allow_html=True)
+# ----------------------------------------------------------------------------
+#  TAB 2 — ACCESS LANDSCAPE
+# ----------------------------------------------------------------------------
+with tab_landscape:
+
+    section_header(
+        "01 · Where the variation lives",
+        "Access scores vary more within brands than across them",
+        "Each dot is a single payer policy. Brands with wide spreads carry significant "
+        "policy-to-policy access volatility — meaning a patient's experience depends heavily "
+        "on which plan they're on, not just which drug their doctor chose."
+    )
+
+    # Strip plot by brand sorted by mean score, only brands with ≥ 1 row
+    brand_summary = df.groupby("Brand").agg(
+        mean_score=("Access Score", "mean"),
+        median_score=("Access Score", "median"),
+        count=("Policy ID", "nunique"),
+        min_score=("Access Score", "min"),
+        max_score=("Access Score", "max"),
+    ).reset_index().sort_values("mean_score", ascending=True)
+
+    # Plot brands in order of mean score
+    df_strip = df.copy()
+    df_strip["Brand"] = pd.Categorical(df_strip["Brand"],
+                                        categories=brand_summary["Brand"].tolist(),
+                                        ordered=True)
+    df_strip = df_strip.sort_values("Brand")
+
+    fig_strip = px.strip(
+        df_strip,
+        x="Access Score", y="Brand",
+        color="Access Tier",
+        color_discrete_map=ACCESS_TIER_COLOR,
+        category_orders={"Access Tier": ACCESS_TIER_ORDER,
+                         "Brand": brand_summary["Brand"].tolist()},
+        stripmode="overlay",
+        hover_data={"Policy #": True, "Brand": False, "Access Tier": True, "Access Score": True},
+    )
+    fig_strip.update_traces(jitter=0.35, marker=dict(size=11, opacity=0.85,
+                                                      line=dict(color=INK, width=0.4)))
+    # Overlay brand mean dashes
+    for _, row in brand_summary.iterrows():
+        if pd.notna(row["mean_score"]):
+            fig_strip.add_shape(
+                type="line",
+                x0=row["mean_score"], x1=row["mean_score"],
+                y0=row["Brand"], y1=row["Brand"],
+                xref="x", yref="y",
+                line=dict(color=INK, width=0),
+            )
+    # Brand mean as a separate trace
+    fig_strip.add_trace(go.Scatter(
+        x=brand_summary["mean_score"],
+        y=brand_summary["Brand"],
+        mode="markers",
+        marker=dict(symbol="line-ns", color=INK, size=18, line=dict(width=3, color=INK)),
+        name="Brand mean",
+        hovertemplate="<b>%{y}</b><br>Mean score: %{x:.1f}<extra></extra>",
+        showlegend=True,
+    ))
+    apply_layout(fig_strip,
+                height=max(380, 30 * len(brand_summary) + 120),
+        xaxis_title="Access Score",
+        yaxis_title="",
+        xaxis=dict(range=[-5, 85], showgrid=True, gridcolor="rgba(201,191,166,0.35)",
+                   linecolor=LINE, ticks="outside", tickcolor=LINE),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                    font=dict(size=11, color=INK_SOFT)),
+    )
+    st.plotly_chart(fig_strip, use_container_width=True, config={"displayModeBar": False})
+
+    # Narrative findings ------------------------------------------------------
+    bs = brand_summary.dropna(subset=["mean_score"]).copy()
+    if len(bs) >= 2:
+        bs_qual = bs[bs["count"] >= 3]
+        if len(bs_qual) >= 2:
+            best  = bs_qual.iloc[-1]
+            worst = bs_qual.iloc[0]
+            finding(
+                "Brand spread",
+                f"Among brands with sufficient coverage, <b>{best['Brand']}</b> "
+                f"averages <b>{best['mean_score']:.0f}</b> on access vs. "
+                f"<b>{worst['Brand']}</b> at <b>{worst['mean_score']:.0f}</b> — a "
+                f"<b>{best['mean_score']-worst['mean_score']:.0f}-point</b> swing that "
+                f"materially affects start rates, time-to-fill, and abandonment risk."
+            )
+
+        widest = bs[bs["count"] >= 2].assign(spread=lambda d: d["max_score"] - d["min_score"]).sort_values("spread", ascending=False)
+        if len(widest):
+            top = widest.iloc[0]
+            finding(
+                "Policy volatility",
+                f"<b>{top['Brand']}</b> shows the widest policy-to-policy access spread "
+                f"(<b>{top['spread']:.0f} points</b>, from {top['min_score']:.0f} to "
+                f"{top['max_score']:.0f}) — suggesting account-level negotiation, not "
+                f"clinical guidelines, is the swing factor."
+            )
+
+    # ---- Access vs. cumulative restrictions scatter ------------------------
+    section_header(
+        "02 · Restriction density vs. score",
+        "The more levers a policy pulls, the lower the access score",
+        "Validating the access-score logic: policies stacking multiple UM levers consistently "
+        "cluster in the restrictive end of the spectrum."
+    )
+
+    df_sc = df.copy()
+    df_sc["Restriction Count"] = restriction_count_per_row(df_sc)
+    df_sc_n = df_sc.dropna(subset=["Access Score"])
+
+    # Aggregate jitter for readability
+    fig_sc = px.scatter(
+        df_sc_n,
+        x="Restriction Count", y="Access Score",
+        color="Access Tier",
+        color_discrete_map=ACCESS_TIER_COLOR,
+        category_orders={"Access Tier": ACCESS_TIER_ORDER},
+        hover_data={"Brand": True, "Policy #": True, "Restriction Count": True,
+                    "Access Score": True, "Access Tier": False},
+    )
+    fig_sc.update_traces(marker=dict(size=12, opacity=0.78,
+                                      line=dict(color=INK, width=0.5)))
+    # Trend line via simple group means
+    trend = df_sc_n.groupby("Restriction Count")["Access Score"].mean().reset_index()
+    fig_sc.add_trace(go.Scatter(
+        x=trend["Restriction Count"], y=trend["Access Score"],
+        mode="lines+markers",
+        line=dict(color=INK, width=2, dash="dot"),
+        marker=dict(color=INK, size=8, symbol="diamond"),
+        name="Mean by lever count",
+        hovertemplate="<b>%{x} levers</b><br>Mean score: %{y:.1f}<extra></extra>",
+    ))
+    apply_layout(fig_sc,
+                height=420,
+        xaxis_title="Number of UM levers pulled in the policy",
+        yaxis_title="Access Score",
+        xaxis=dict(dtick=1, range=[-0.5, len(RESTRICTION_FIELDS) + 0.5], linecolor=LINE,
+                   showgrid=False),
+        yaxis=dict(range=[-5, 85], gridcolor="rgba(201,191,166,0.35)"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                    font=dict(size=11, color=INK_SOFT)),
+    )
+    st.plotly_chart(fig_sc, use_container_width=True, config={"displayModeBar": False})
+
+    caption(
+        "Every additional utilization-management lever drives the mean access score down — "
+        "consistent with the scoring rubric and a useful sanity check for the extraction pipeline."
+    )
+
+
+# ----------------------------------------------------------------------------
+#  TAB 3 — BRAND COMPARISON
+# ----------------------------------------------------------------------------
+with tab_brands:
+
+    section_header(
+        "01 · Head-to-head",
+        "How brands stack up on access",
+        "Brand-level averages, coverage volume, and access composition. Brands with very few "
+        "policies are flagged for interpretive caution."
+    )
+
+    # Brand summary -----------------------------------------------------------
+    bs = df.groupby("Brand").agg(
+        Policies=("Policy ID", "nunique"),
+        Mean=("Access Score", "mean"),
+        Median=("Access Score", "median"),
+        Min=("Access Score", "min"),
+        Max=("Access Score", "max"),
+    ).reset_index().sort_values("Mean", ascending=False)
+
+    bs["Coverage"] = bs["Policies"].apply(
+        lambda n: "✦ broad" if n >= 10 else ("◆ moderate" if n >= 3 else "· thin")
+    )
+
+    # Brand ranking chart -----------------------------------------------------
+    fig_br = go.Figure()
+    fig_br.add_trace(go.Bar(
+        y=bs["Brand"],
+        x=bs["Mean"],
+        orientation="h",
+        marker=dict(
+            color=[ACCESS_TIER_COLOR.get(access_tier(v), AMBER) for v in bs["Mean"]],
+            line=dict(color=INK, width=0.4),
+        ),
+        text=[f"{v:.0f}" for v in bs["Mean"]],
+        textposition="outside",
+        textfont=dict(color=INK, size=12, family="Manrope"),
+        hovertemplate=("<b>%{y}</b><br>"
+                       "Mean access score: %{x:.1f}<br>"
+                       "Policies: %{customdata[0]}<br>"
+                       "Range: %{customdata[1]:.0f}–%{customdata[2]:.0f}<extra></extra>"),
+        customdata=bs[["Policies", "Min", "Max"]].values,
+        showlegend=False,
+    ))
+    apply_layout(fig_br,
+                height=max(360, 26 * len(bs) + 80),
+        xaxis_title="Mean access score (higher = more open)",
+        yaxis_title="",
+        xaxis=dict(range=[0, 90], linecolor=LINE),
+        yaxis=dict(categoryorder="array", categoryarray=bs["Brand"].tolist()[::-1],
+                   linecolor=LINE),
+    )
+    fig_br.add_vline(x=df["Access Score"].mean(), line_dash="dot", line_color=INK_SOFT,
+                     annotation_text=f"Corpus mean {df['Access Score'].mean():.0f}",
+                     annotation_position="top right",
+                     annotation_font_color=INK_SOFT, annotation_font_size=11)
+    st.plotly_chart(fig_br, use_container_width=True, config={"displayModeBar": False})
+
+    # Brand summary table -----------------------------------------------------
+    section_header(
+        "02 · Coverage & spread",
+        "The numbers behind the chart",
+        ""
+    )
+    show = bs.copy()
+    show["Mean"]   = show["Mean"].round(1)
+    show["Median"] = show["Median"].round(0)
+    show["Range"]  = show.apply(lambda r: f"{r['Min']:.0f}–{r['Max']:.0f}" if pd.notna(r["Min"]) else "—", axis=1)
+    show = show[["Brand", "Policies", "Coverage", "Mean", "Median", "Range"]]
+    show = show.rename(columns={"Mean": "Mean score", "Median": "Median score"})
+    st.dataframe(
+        show,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Brand":        st.column_config.TextColumn("Brand", width="medium"),
+            "Policies":     st.column_config.NumberColumn("Policies", help="Unique payer policies"),
+            "Coverage":     st.column_config.TextColumn("Coverage depth"),
+            "Mean score":   st.column_config.ProgressColumn(
+                                "Mean score", format="%.1f", min_value=0, max_value=80,
+                            ),
+            "Median score": st.column_config.NumberColumn("Median", format="%.0f"),
+            "Range":        st.column_config.TextColumn("Score range"),
+        },
+    )
+
+    caption(
+        "Brands with fewer than three policies should be read directionally — their averages "
+        "can swing significantly with one additional observation."
+    )
+
+    # Brand restriction signature heatmap -------------------------------------
+    section_header(
+        "03 · Restriction signatures",
+        "What each brand contends with",
+        "For brands with enough coverage to compare, the cell shows the share of that brand's "
+        "policies imposing each restriction. Darker = more pervasive."
+    )
+
+    brand_qual = bs[bs["Policies"] >= 2]["Brand"].tolist()
+    if len(brand_qual) >= 2:
+        rows = []
+        for b in brand_qual:
+            sub = df[df["Brand"] == b]
+            n = len(sub)
+            for col, val, label in RESTRICTION_FIELDS:
+                share = (sub[col] == val).mean() if n else 0
+                rows.append({"Brand": b, "Restriction": label, "Share": share})
+        heat = pd.DataFrame(rows).pivot(index="Brand", columns="Restriction", values="Share")
+        # Order brands by mean score descending
+        heat = heat.reindex(bs[bs["Brand"].isin(brand_qual)]
+                            .sort_values("Mean", ascending=False)["Brand"].tolist())
+        # Order columns by overall prevalence
+        col_order = restriction_prevalence(df).sort_values("Share", ascending=False)["Restriction"].tolist()
+        heat = heat[[c for c in col_order if c in heat.columns]]
+
+        fig_h = go.Figure(go.Heatmap(
+            z=heat.values * 100,
+            x=heat.columns,
+            y=heat.index,
+            colorscale=[[0, PAPER], [0.5, GOLD_LIGHT], [1, AMBER_DEEP]],
+            zmin=0, zmax=100,
+            text=[[f"{v:.0f}%" for v in row] for row in heat.values * 100],
+            texttemplate="%{text}",
+            textfont=dict(color=INK, size=11, family="Manrope"),
+            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.0f}%%<extra></extra>",
+            colorbar=dict(title=dict(text="Share", font=dict(color=INK_SOFT, size=11)),
+                          tickfont=dict(color=INK_SOFT, size=10),
+                          ticksuffix="%", thickness=12, len=0.6, x=1.02),
+        ))
+        apply_layout(fig_h,
+                        height=max(280, 32 * len(heat) + 140),
+            xaxis=dict(side="top", tickangle=-22, linecolor=LINE),
+            yaxis=dict(autorange="reversed", linecolor=LINE),
+        )
+        st.plotly_chart(fig_h, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("Need at least two brands with ≥ 2 policies to render the restriction-signature heatmap.")
+
+
+# ----------------------------------------------------------------------------
+#  TAB 4 — RESTRICTION PATTERNS
+# ----------------------------------------------------------------------------
+with tab_restrictions:
+
+    section_header(
+        "01 · The UM playbook",
+        "How payers actually limit access",
+        "A composite view of utilization management levers across the corpus — what's used, "
+        "how intensely, and what it implies for the patient journey."
+    )
+
+    rp = restriction_prevalence(df).sort_values("Share", ascending=False).reset_index(drop=True)
+
+    cols = st.columns(3)
+    for i, (_, row) in enumerate(rp.iterrows()):
+        with cols[i % 3]:
+            kpi_card(
+                row["Restriction"],
+                f"{row['Share']*100:.0f}",
+                "%",
+                f"{int(row['Count'])} of {len(df)} brand-policy rows",
+                flavor=("warn" if row["Share"] > 0.5 else ""),
+            )
+
+    st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
+
+    # Step therapy intensity --------------------------------------------------
+    section_header(
+        "02 · Step therapy intensity",
+        "How many therapies must a patient try first?",
+        "Among policies that document step therapy, how many branded and generic steps are required."
+    )
+
+    steps_df = df.dropna(subset=["Total Steps"]).copy()
+    if not steps_df.empty:
+        col_l, col_r = st.columns([1.0, 1.0], gap="large")
+
+        with col_l:
+            # Total steps distribution
+            sd = steps_df["Total Steps"].astype(int).value_counts().reset_index()
+            sd.columns = ["Steps", "Count"]
+            sd = sd.sort_values("Steps")
+            fig_steps = go.Figure(go.Bar(
+                x=sd["Steps"], y=sd["Count"],
+                marker=dict(color=AMBER, line=dict(color=AMBER_DEEP, width=0.4)),
+                text=sd["Count"], textposition="outside",
+                textfont=dict(color=INK, size=12),
+                hovertemplate="<b>%{x} step(s)</b><br>%{y} policies<extra></extra>",
+            ))
+            apply_layout(fig_steps,
+                                height=320,
+                xaxis_title="Total steps required",
+                yaxis_title="Policies",
+                xaxis=dict(dtick=1, linecolor=LINE),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_steps, use_container_width=True, config={"displayModeBar": False})
+
+        with col_r:
+            # Brand vs generic step composition
+            comp = pd.DataFrame({
+                "Type": ["Brand / biologic steps", "Generic / oral steps"],
+                "Mean": [steps_df["Brand Steps"].mean(),
+                         steps_df["Generic Steps"].mean()],
+            })
+            fig_comp = go.Figure(go.Bar(
+                x=comp["Mean"], y=comp["Type"],
+                orientation="h",
+                marker=dict(color=[CORAL, SAGE],
+                            line=dict(color=INK, width=0.4)),
+                text=[f"{v:.1f}" for v in comp["Mean"]],
+                textposition="outside",
+                textfont=dict(color=INK, size=13),
+                hovertemplate="<b>%{y}</b><br>Avg: %{x:.2f}<extra></extra>",
+            ))
+            apply_layout(fig_comp,
+                                height=320,
+                xaxis_title="Average number of steps",
+                yaxis_title="",
+                xaxis=dict(linecolor=LINE),
+            )
+            st.plotly_chart(fig_comp, use_container_width=True, config={"displayModeBar": False})
+
+        caption(
+            "Branded-biologic step-throughs are the dominant lever — typical of a "
+            "competitive immunology category where payers steer toward preferred brands "
+            "before approving newer entrants."
+        )
+    else:
+        st.info("No step-count data available in the current filter.")
+
+    # Authorization duration --------------------------------------------------
+    section_header(
+        "03 · Authorization duration",
+        "How long is the leash?",
+        "Shorter initial-authorization periods mean more frequent reauthorization touchpoints — "
+        "an indirect access barrier that drives administrative burden for prescribers."
+    )
+
+    col_a, col_b = st.columns(2, gap="large")
+    auth_df = df.dropna(subset=["Initial Auth (months)"]).copy()
+    if not auth_df.empty:
+        with col_a:
+            ad = auth_df["Initial Auth (months)"].astype(int).value_counts().reset_index()
+            ad.columns = ["Months", "Count"]
+            ad = ad.sort_values("Months")
+            fig_ad = go.Figure(go.Bar(
+                x=ad["Months"].astype(str), y=ad["Count"],
+                marker=dict(color=AMBER, line=dict(color=AMBER_DEEP, width=0.4)),
+                text=ad["Count"], textposition="outside",
+                textfont=dict(color=INK, size=12),
+                hovertemplate="<b>%{x} mo</b><br>%{y} policies<extra></extra>",
+            ))
+            apply_layout(fig_ad,
+                                height=300,
+                title="Initial authorization (months)",
+                xaxis_title="Months",
+                yaxis_title="Policies",
+                xaxis=dict(linecolor=LINE),
+            )
+            st.plotly_chart(fig_ad, use_container_width=True, config={"displayModeBar": False})
+
+    reauth_df = df.dropna(subset=["Reauth (months)"]).copy()
+    if not reauth_df.empty:
+        with col_b:
+            rd = reauth_df["Reauth (months)"].astype(int).value_counts().reset_index()
+            rd.columns = ["Months", "Count"]
+            rd = rd.sort_values("Months")
+            fig_rd = go.Figure(go.Bar(
+                x=rd["Months"].astype(str), y=rd["Count"],
+                marker=dict(color=SAGE, line=dict(color="#2D5050", width=0.4)),
+                text=rd["Count"], textposition="outside",
+                textfont=dict(color=INK, size=12),
+                hovertemplate="<b>%{x} mo</b><br>%{y} policies<extra></extra>",
+            ))
+            apply_layout(fig_rd,
+                                height=300,
+                title="Reauthorization duration (months)",
+                xaxis_title="Months",
+                yaxis_title="Policies",
+                xaxis=dict(linecolor=LINE),
+            )
+            st.plotly_chart(fig_rd, use_container_width=True, config={"displayModeBar": False})
+
+    if not auth_df.empty:
+        median_init = auth_df["Initial Auth (months)"].median()
+        share_short = (auth_df["Initial Auth (months)"] <= 6).mean() * 100
+        finding(
+            "Time on therapy",
+            f"Median initial authorization is <b>{median_init:.0f} months</b>; "
+            f"<b>{share_short:.0f}%</b> of scoring policies grant only six months or less, "
+            f"compounding administrative friction at re-approval."
+        )
+
+
+# ----------------------------------------------------------------------------
+#  TAB 5 — POLICY EXPLORER
+# ----------------------------------------------------------------------------
+with tab_explorer:
+
+    section_header(
+        "01 · Drill down",
+        "Inspect specific brand–policy combinations",
+        "A clean view of the underlying records, with full policy text available on expand. "
+        "Use the search and sort to locate specific brand-policy combinations."
+    )
+
+    # Searchable filter ---------------------------------------------------
+    q = st.text_input("Search by brand or policy text",
+                      placeholder="e.g. STELARA, dermatologist, BSA, methotrexate…",
+                      label_visibility="visible")
+
+    df_expl = df.copy()
+    if q.strip():
+        qlow = q.strip().lower()
+        text_cols = ["Brand", "Policy ID",
+                     "Step Therapy Requirements Documented in Policy",
+                     "Reauthorization Requirements Documented in Policy",
+                     "Specialist Types", "Quantity Limits", "Age Criterion"]
+        cond = pd.Series(False, index=df_expl.index)
+        for c in text_cols:
+            if c in df_expl.columns:
+                cond |= df_expl[c].astype(str).str.lower().str.contains(qlow, na=False)
+        df_expl = df_expl[cond]
+
+    sort_col, sort_dir = st.columns([1, 1])
+    with sort_col:
+        sort_by = st.selectbox(
+            "Sort by",
+            options=["Access Score", "Brand", "Initial Auth (months)", "Total Steps"],
+            index=0,
+        )
+    with sort_dir:
+        order = st.selectbox("Order", options=["Most restrictive first", "Most open first"], index=0)
+
+    asc = (order == "Most restrictive first")
+    df_expl = df_expl.sort_values(sort_by, ascending=asc, na_position="last")
+
+    # Compact view -----------------------------------------------------
+    view = df_expl[[
+        "Brand", "Policy #", "Policy ID", "Access Score", "Access Tier",
+        "Age Criterion", "TB Test", "Quantity Limit", "Specialist Required",
+        "Phototherapy Step", "Brand Steps", "Generic Steps",
+        "Initial Auth (months)", "Reauth (months)",
+    ]].rename(columns={
+        "Policy ID": "Source policy",
+    })
+
+    st.dataframe(
+        view,
+        hide_index=True,
+        use_container_width=True,
+        height=420,
+        column_config={
+            "Brand":            st.column_config.TextColumn("Brand", width="medium"),
+            "Policy #":         st.column_config.TextColumn("Policy", width="small"),
+            "Source policy":    st.column_config.TextColumn("Source policy", width="medium",
+                                                            help="Underlying PDF identifier"),
+            "Access Score":     st.column_config.ProgressColumn(
+                                    "Access score", format="%d", min_value=0, max_value=80),
+            "Access Tier":      st.column_config.TextColumn("Tier"),
+            "Age Criterion":    st.column_config.TextColumn("Age"),
+            "Brand Steps":      st.column_config.NumberColumn("Brand steps", format="%.0f"),
+            "Generic Steps":    st.column_config.NumberColumn("Generic steps", format="%.0f"),
+            "Initial Auth (months)": st.column_config.NumberColumn("Initial auth (mo)", format="%.0f"),
+            "Reauth (months)":  st.column_config.NumberColumn("Reauth (mo)", format="%.0f"),
+        },
+    )
+
+    # Detailed inspector ----------------------------------------------
+    section_header(
+        "02 · Policy detail",
+        "Full extraction for a single brand–policy",
+        "Pick a row to see the raw policy language — useful for due diligence on the extraction."
+    )
+
+    if len(df_expl) == 0:
+        st.info("No records match the current filters / search.")
+    else:
+        df_expl["__label"] = df_expl["Brand"] + " · " + df_expl["Policy #"] + \
+                              " · score " + df_expl["Access Score"].astype("Int64").astype(str)
+        choice = st.selectbox(
+            "Choose a record",
+            options=df_expl["__label"].tolist(),
+            label_visibility="visible",
+        )
+        row = df_expl[df_expl["__label"] == choice].iloc[0]
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: kpi_card("Brand", row["Brand"], "", row["Policy #"])
+        with c2: kpi_card("Access score", f"{int(row['Access Score'])}" if pd.notna(row['Access Score']) else "—",
+                          "", row["Access Tier"])
+        with c3: kpi_card("Initial auth",
+                          f"{int(row['Initial Auth (months)'])}" if pd.notna(row['Initial Auth (months)']) else "—",
+                          " mo", "Months of coverage on approval")
+        with c4: kpi_card("Reauth",
+                          f"{int(row['Reauth (months)'])}" if pd.notna(row['Reauth (months)']) else "—",
+                          " mo", "Months until reassessment")
+
+        st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+
+        with st.expander("Step therapy language", expanded=True):
+            txt = row.get("Step Therapy Requirements Documented in Policy")
+            if pd.notna(txt) and str(txt).strip().lower() not in {"no", "nan"}:
+                st.write(txt)
+            else:
+                st.caption("No step therapy language extracted.")
+
+        with st.expander("Reauthorization requirements"):
+            txt = row.get("Reauthorization Requirements Documented in Policy")
+            if pd.notna(txt):
+                st.write(txt)
+            else:
+                st.caption("No reauthorization language extracted.")
+
+        with st.expander("Quantity limit language"):
+            txt = row.get("Quantity Limits")
+            if pd.notna(txt) and str(txt).strip().lower() not in {"no", "nan"}:
+                st.write(txt)
+            else:
+                st.caption("No quantity limit specified, or recorded as 'No'.")
+
+        with st.expander("Specialist & age criteria"):
+            st.write(f"**Specialist:** {row.get('Specialist Types') or '—'}")
+            st.write(f"**Age:** {row.get('Age Criterion') or '—'}")
+
+        with st.expander("Underlying file"):
+            st.code(row["Policy ID"] + ".pdf", language="text")
+
+
+# ============================================================================
+#  FOOTER
+# ============================================================================
+st.markdown(
+    f"""
+<div class="zs-footer">
+  <span>ZS · Market Access Practice · Plaque Psoriasis Policy Lens</span>
+  <span>Generated from extracted PA policy corpus</span>
+</div>
+""",
+    unsafe_allow_html=True,
+)
