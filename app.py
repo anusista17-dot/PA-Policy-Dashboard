@@ -459,14 +459,35 @@ SHEET_NAME = "Gold Standard"
 
 
 @st.cache_data(show_spinner=False)
-def load_workbook(source) -> Optional[pd.DataFrame]:
-    """Load the gold-standard sheet from a path, uploaded file, or bytes."""
+def load_workbook(source_bytes: bytes, _source_label: str = "") -> Optional[pd.DataFrame]:
+    """Load the gold-standard sheet from xlsx bytes.
+
+    Caching keys on the file bytes (immutable) rather than on the UploadedFile
+    object, which is safer across Streamlit reruns. `engine="openpyxl"` is
+    pinned so the dependency is explicit; pair this with `openpyxl` in
+    requirements.txt.
+    """
+    buf = io.BytesIO(source_bytes)
     try:
-        df = pd.read_excel(source, sheet_name=SHEET_NAME)
-    except Exception:
-        # Fall back to first sheet if "Gold Standard" isn't present
-        df = pd.read_excel(source)
-    return df
+        return pd.read_excel(buf, sheet_name=SHEET_NAME, engine="openpyxl")
+    except ValueError:
+        # "Gold Standard" sheet not present in this workbook — fall back to first sheet
+        buf.seek(0)
+        return pd.read_excel(buf, engine="openpyxl")
+
+
+def _read_source_bytes(source) -> Optional[bytes]:
+    """Return the raw bytes for either a local path or an UploadedFile."""
+    if source is None:
+        return None
+    if isinstance(source, (str, Path)):
+        return Path(source).read_bytes()
+    # Streamlit UploadedFile
+    if hasattr(source, "getvalue"):
+        return source.getvalue()
+    if hasattr(source, "read"):
+        return source.read()
+    return None
 
 
 def find_local_file() -> Optional[str]:
@@ -713,8 +734,29 @@ st.sidebar.markdown('<div class="zs-sidebar-title">PsO Policy Lens</div>', unsaf
 
 local_path = find_local_file()
 df_raw: Optional[pd.DataFrame] = None
+
+def _load_with_friendly_errors(source, label: str) -> Optional[pd.DataFrame]:
+    """Read xlsx bytes through load_workbook with user-friendly error handling."""
+    try:
+        raw = _read_source_bytes(source)
+        if raw is None:
+            return None
+        return load_workbook(raw, label)
+    except ImportError as e:
+        st.error(
+            "**Missing dependency.** This deployment can't read `.xlsx` files because "
+            "`openpyxl` is not installed.\n\n"
+            "**Fix:** add a `requirements.txt` to the repo with:\n\n"
+            "```\nstreamlit>=1.32\npandas>=2.0\nnumpy>=1.24\nplotly>=5.18\nopenpyxl>=3.1\n```\n\n"
+            "Then redeploy. (Underlying error: `" + str(e) + "`)"
+        )
+        st.stop()
+    except Exception as e:
+        st.error(f"Could not read the workbook ({label}). Details: `{e}`")
+        st.stop()
+
 if local_path is not None:
-    df_raw = load_workbook(local_path)
+    df_raw = _load_with_friendly_errors(local_path, local_path)
 else:
     st.sidebar.markdown("##### Upload data")
     upl = st.sidebar.file_uploader(
@@ -724,7 +766,7 @@ else:
         label_visibility="collapsed",
     )
     if upl is not None:
-        df_raw = load_workbook(upl)
+        df_raw = _load_with_friendly_errors(upl, upl.name)
 
 if df_raw is None:
     render_masthead(pd.DataFrame({"Policy ID": [], "Brand": []}))
