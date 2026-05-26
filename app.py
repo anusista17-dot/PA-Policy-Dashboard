@@ -1,14 +1,4 @@
-"""
-PsO Market Access Intelligence — Client Dashboard
-A consulting-style Streamlit dashboard built on extracted prior-authorization
-policy data, focused on TREMFYA vs. STELARA in plaque psoriasis.
-
-To run:
-    streamlit run app.py
-
-Dependencies (also see requirements.txt):
-    streamlit, pandas, numpy, plotly, openpyxl
-"""
+"""PsO Market Access Intelligence — TREMFYA vs STELARA."""
 
 from __future__ import annotations
 
@@ -38,34 +28,25 @@ st.set_page_config(
 # ============================================================================
 #  DESIGN SYSTEM
 # ============================================================================
-
-# Core palette — clean dashboard, not editorial document
 INK         = "#1F2937"
 INK_SOFT    = "#4B5563"
 SLATE       = "#6B7280"
 LINE        = "#E5E7EB"
 LINE_SOFT   = "#F1EFE9"
-PAPER       = "#FBFAF6"   # soft warm white background
+PAPER       = "#FBFAF6"
 CARD        = "#FFFFFF"
-NAVY        = "#1E293B"   # sidebar
-AMBER       = "#D97706"   # accent
+NAVY        = "#1E293B"
+AMBER       = "#D97706"
 AMBER_SOFT  = "#FBBF24"
 
-# Brand-specific palette — used consistently across every chart
-TREMFYA_C       = "#047857"  # deep emerald
+TREMFYA_C       = "#047857"
 TREMFYA_LIGHT   = "#10B981"
-STELARA_C       = "#6D28D9"  # deep violet
+STELARA_C       = "#6D28D9"
 STELARA_LIGHT   = "#A78BFA"
-OTHER_C         = "#94A3B8"  # muted slate for context brands
 
-BRAND_COLORS = {
-    "TREMFYA": TREMFYA_C,
-    "STELARA": STELARA_C,
-}
-
+BRAND_COLORS = {"TREMFYA": TREMFYA_C, "STELARA": STELARA_C}
 FOCUS_BRANDS = ["TREMFYA", "STELARA"]
 
-# Access tier semantics (kept simple — restrictive vs moderate vs open)
 ACCESS_TIER_ORDER = ["Highly Restrictive", "Restricted", "Moderate", "Open", "Highly Open"]
 ACCESS_TIER_COLOR = {
     "Highly Restrictive": "#B91C1C",
@@ -76,8 +57,13 @@ ACCESS_TIER_COLOR = {
     "Unscored":           "#94A3B8",
 }
 
-# Plotly base layout (NO `title` key — always set chart titles via Streamlit
-# headers, never via Plotly, to avoid any "undefined" rendering)
+ARCHETYPE_ORDER = ["Open access", "Standard access", "Tight access"]
+ARCHETYPE_COLOR = {
+    "Open access":     "#16A34A",
+    "Standard access": "#CA8A04",
+    "Tight access":    "#B91C1C",
+}
+
 PLOTLY_BASE = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
@@ -96,7 +82,6 @@ PLOTLY_BASE = dict(
 
 
 def apply_layout(fig: go.Figure, **overrides) -> go.Figure:
-    """Merge PLOTLY_BASE with chart-specific overrides (shallow merge on dicts)."""
     merged = {k: (dict(v) if isinstance(v, dict) else v) for k, v in PLOTLY_BASE.items()}
     for k, v in overrides.items():
         if isinstance(v, dict) and isinstance(merged.get(k), dict):
@@ -107,9 +92,6 @@ def apply_layout(fig: go.Figure, **overrides) -> go.Figure:
     return fig
 
 
-# ---------------------------------------------------------------------------- 
-#  CSS — focused, dashboard-style (not document-style)
-# ---------------------------------------------------------------------------- 
 CUSTOM_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@300;400;500;600;700&display=swap');
@@ -118,399 +100,272 @@ html, body, [class*="css"], button, input, select, textarea {{
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif !important;
     color: {INK};
 }}
-
-.stApp {{
-    background: {PAPER};
-    color: {INK};
-}}
-
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
+.stApp {{ background: {PAPER}; color: {INK}; }}
+#MainMenu, footer {{ visibility: hidden; }}
 header[data-testid="stHeader"] {{ background: transparent; height: 0; }}
+section.main > div.block-container {{ padding-top: 1.5rem; padding-bottom: 4rem; max-width: 1380px; }}
 
-section.main > div.block-container {{
-    padding-top: 1.5rem;
-    padding-bottom: 4rem;
-    max-width: 1380px;
-}}
-
-/* ---------- Compact masthead ---------- */
+/* Masthead */
 .zs-masthead {{
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-    border-bottom: 1px solid {LINE};
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid {LINE};
 }}
 .zs-masthead-left .eyebrow {{
-    font-size: 10.5px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: {AMBER};
-    font-weight: 700;
-    margin-bottom: 4px;
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: {AMBER}; font-weight: 700; margin-bottom: 4px;
 }}
 .zs-masthead-left h1 {{
     font-family: 'Fraunces', Georgia, serif !important;
-    font-weight: 600;
-    font-size: 30px;
-    line-height: 1.15;
-    letter-spacing: -0.015em;
-    color: {INK};
-    margin: 0 0 4px 0;
+    font-weight: 600; font-size: 28px; line-height: 1.15;
+    letter-spacing: -0.015em; color: {INK}; margin: 0 0 4px 0;
 }}
 .zs-masthead-left .deck {{
-    font-size: 13px;
-    color: {INK_SOFT};
-    max-width: 700px;
-    line-height: 1.45;
+    font-size: 13px; color: {INK_SOFT}; max-width: 720px; line-height: 1.45;
 }}
 .zs-masthead-right {{
-    text-align: right;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: {SLATE};
-    font-weight: 500;
+    text-align: right; font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: {SLATE}; font-weight: 500;
 }}
-.zs-masthead-right .pill {{
-    display: inline-block;
-    padding: 4px 10px;
-    background: {NAVY};
-    color: {PAPER};
-    margin-left: 6px;
-    border-radius: 2px;
-    font-weight: 600;
-    font-size: 10px;
-    letter-spacing: 0.12em;
+.zs-pill-tremfya, .zs-pill-stelara {{
+    display: inline-block; padding: 4px 11px; margin-left: 6px;
+    border-radius: 2px; font-weight: 700; font-size: 10px;
+    letter-spacing: 0.14em; color: #FFFFFF;
 }}
+.zs-pill-tremfya {{ background: {TREMFYA_C}; }}
+.zs-pill-stelara {{ background: {STELARA_C}; }}
 
-/* ---------- Section heading ---------- */
+/* Section heading */
 .zs-h2 {{
     font-family: 'Fraunces', Georgia, serif !important;
-    font-weight: 600;
-    font-size: 21px;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-    color: {INK};
-    margin: 30px 0 4px 0;
+    font-weight: 600; font-size: 20px; line-height: 1.2;
+    letter-spacing: -0.01em; color: {INK}; margin: 30px 0 4px 0;
 }}
 .zs-h2-deck {{
-    font-size: 13px;
-    color: {INK_SOFT};
-    line-height: 1.5;
-    margin-bottom: 16px;
-    max-width: 820px;
+    font-size: 13px; color: {INK_SOFT}; line-height: 1.5;
+    margin-bottom: 16px; max-width: 820px;
 }}
 
-/* Question prompt above each chart — gives the consulting voice */
+/* Question prompt */
 .zs-question {{
     font-family: 'Fraunces', Georgia, serif !important;
-    font-size: 16px;
-    font-weight: 500;
-    font-style: italic;
-    color: {INK};
-    margin: 18px 0 4px 0;
-    line-height: 1.4;
+    font-size: 15.5px; font-weight: 500; font-style: italic;
+    color: {INK}; margin: 16px 0 6px 0; line-height: 1.4;
 }}
 
-/* ---------- KPI cards (Streamlit-native containers + custom CSS) ---------- */
+/* KPI cards */
 .zs-kpi {{
-    background: {CARD};
-    border: 1px solid {LINE};
-    border-radius: 4px;
-    padding: 14px 16px;
-    height: 100%;
-    position: relative;
+    background: {CARD}; border: 1px solid {LINE}; border-radius: 4px;
+    padding: 14px 16px; height: 100%; position: relative;
 }}
 .zs-kpi-accent {{
-    position: absolute;
-    top: 0; left: 0;
-    width: 4px; height: 100%;
-    background: {AMBER};
-    border-radius: 4px 0 0 4px;
+    position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+    background: {AMBER}; border-radius: 4px 0 0 4px;
 }}
 .zs-kpi-accent.tremfya {{ background: {TREMFYA_C}; }}
 .zs-kpi-accent.stelara {{ background: {STELARA_C}; }}
 .zs-kpi-accent.neutral {{ background: {SLATE}; }}
-
 .zs-kpi-label {{
-    font-size: 10.5px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: {SLATE};
-    font-weight: 600;
-    margin-bottom: 6px;
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: {SLATE}; font-weight: 600; margin-bottom: 6px;
 }}
 .zs-kpi-value {{
     font-family: 'Fraunces', Georgia, serif !important;
-    font-size: 30px;
-    font-weight: 600;
-    line-height: 1.05;
-    color: {INK};
-    letter-spacing: -0.02em;
+    font-size: 30px; font-weight: 600; line-height: 1.05;
+    color: {INK}; letter-spacing: -0.02em;
 }}
 .zs-kpi-value .unit {{
-    font-size: 13px;
-    color: {SLATE};
-    font-family: 'Manrope', sans-serif !important;
-    font-weight: 500;
-    margin-left: 4px;
+    font-size: 13px; color: {SLATE}; font-family: 'Manrope', sans-serif !important;
+    font-weight: 500; margin-left: 4px;
 }}
 .zs-kpi-foot {{
-    font-size: 11.5px;
-    color: {INK_SOFT};
-    margin-top: 8px;
-    line-height: 1.4;
-    min-height: 1.4em;
+    font-size: 11.5px; color: {INK_SOFT}; margin-top: 8px;
+    line-height: 1.4; min-height: 1.4em;
 }}
 
-/* ---------- Observation tiles ---------- */
+/* Implication tiles */
 .zs-obs {{
-    background: {CARD};
-    border: 1px solid {LINE};
-    border-left: 3px solid {AMBER};
-    border-radius: 3px;
-    padding: 14px 16px;
-    height: 100%;
+    background: {CARD}; border: 1px solid {LINE}; border-left: 3px solid {AMBER};
+    border-radius: 3px; padding: 14px 16px; height: 100%;
 }}
 .zs-obs.tremfya {{ border-left-color: {TREMFYA_C}; }}
 .zs-obs.stelara {{ border-left-color: {STELARA_C}; }}
 .zs-obs.neutral {{ border-left-color: {SLATE}; }}
 .zs-obs-tag {{
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: {AMBER};
-    font-weight: 700;
-    margin-bottom: 6px;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: {AMBER}; font-weight: 700; margin-bottom: 6px;
 }}
 .zs-obs.tremfya .zs-obs-tag {{ color: {TREMFYA_C}; }}
 .zs-obs.stelara .zs-obs-tag {{ color: {STELARA_C}; }}
 .zs-obs.neutral .zs-obs-tag {{ color: {SLATE}; }}
-.zs-obs-text {{
-    font-size: 13.5px;
-    color: {INK};
-    line-height: 1.55;
-}}
+.zs-obs-text {{ font-size: 13.5px; color: {INK}; line-height: 1.55; }}
 .zs-obs-text b {{ color: {INK}; font-weight: 700; }}
 
-/* ---------- Scorecard ---------- */
+/* Verdict band */
+.zs-verdict {{
+    background: linear-gradient(90deg, {TREMFYA_C} 0%, {TREMFYA_LIGHT} 100%);
+    color: #FFFFFF; padding: 14px 22px; border-radius: 4px; margin-top: 6px;
+    display: flex; align-items: center; justify-content: space-between;
+}}
+.zs-verdict.stelara {{ background: linear-gradient(90deg, {STELARA_C} 0%, {STELARA_LIGHT} 100%); }}
+.zs-verdict.parity {{ background: linear-gradient(90deg, {SLATE} 0%, #94A3B8 100%); }}
+.zs-verdict .label {{
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    font-weight: 700; opacity: 0.85;
+}}
+.zs-verdict .text {{
+    font-family: 'Fraunces', Georgia, serif !important;
+    font-size: 19px; font-weight: 600; line-height: 1.25; margin-top: 4px;
+}}
+.zs-verdict .number {{
+    font-family: 'Fraunces', Georgia, serif !important;
+    font-size: 38px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+}}
+.zs-verdict .number .small {{ font-size: 14px; font-weight: 500; opacity: 0.85; }}
+
+/* Scorecard */
 .zs-scorecard {{
-    background: {CARD};
-    border: 1px solid {LINE};
-    border-top: 4px solid {TREMFYA_C};
-    padding: 18px 20px;
-    border-radius: 3px;
+    background: {CARD}; border: 1px solid {LINE}; border-top: 4px solid {TREMFYA_C};
+    padding: 18px 20px; border-radius: 3px;
 }}
 .zs-scorecard.stelara {{ border-top-color: {STELARA_C}; }}
 .zs-scorecard h3 {{
     font-family: 'Fraunces', Georgia, serif !important;
-    font-size: 22px;
-    font-weight: 600;
-    margin: 0;
-    color: {INK};
+    font-size: 22px; font-weight: 600; margin: 0; color: {INK};
     letter-spacing: -0.01em;
 }}
-.zs-scorecard .brand-strap {{
-    font-size: 11px;
-    color: {SLATE};
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 600;
-    margin-bottom: 4px;
+.zs-scorecard .strap {{
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    font-weight: 700; margin-bottom: 4px;
 }}
 .zs-scorecard .strap.tremfya {{ color: {TREMFYA_C}; }}
 .zs-scorecard .strap.stelara {{ color: {STELARA_C}; }}
-
-.zs-scorecard table {{
-    width: 100%;
-    margin-top: 14px;
-    border-collapse: collapse;
-}}
+.zs-scorecard table {{ width: 100%; margin-top: 14px; border-collapse: collapse; }}
 .zs-scorecard table td {{
-    padding: 8px 0;
-    border-bottom: 1px dashed {LINE};
-    font-size: 13px;
-    color: {INK};
+    padding: 8px 0; border-bottom: 1px dashed {LINE};
+    font-size: 13px; color: {INK};
 }}
 .zs-scorecard table tr:last-child td {{ border-bottom: none; }}
-.zs-scorecard table td.label {{
-    color: {INK_SOFT};
-}}
+.zs-scorecard table td.label {{ color: {INK_SOFT}; }}
 .zs-scorecard table td.value {{
-    text-align: right;
-    font-weight: 600;
-    color: {INK};
+    text-align: right; font-weight: 600; color: {INK};
     font-variant-numeric: tabular-nums;
 }}
 
-/* ---------- Detail field ---------- */
+/* Archetype card */
+.zs-arch {{
+    background: {CARD}; border: 1px solid {LINE}; border-top: 4px solid {SLATE};
+    border-radius: 3px; padding: 14px 16px; height: 100%;
+}}
+.zs-arch.open {{ border-top-color: {ACCESS_TIER_COLOR['Open']}; }}
+.zs-arch.std  {{ border-top-color: {ACCESS_TIER_COLOR['Moderate']}; }}
+.zs-arch.tight{{ border-top-color: {ACCESS_TIER_COLOR['Highly Restrictive']}; }}
+.zs-arch .name {{
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: {SLATE}; font-weight: 700; margin-bottom: 4px;
+}}
+.zs-arch .count {{
+    font-family: 'Fraunces', Georgia, serif !important;
+    font-size: 28px; font-weight: 600; color: {INK}; line-height: 1;
+}}
+.zs-arch .count .u {{ font-size: 13px; color: {SLATE}; font-family: 'Manrope', sans-serif !important; margin-left: 4px; }}
+.zs-arch .desc {{ font-size: 12px; color: {INK_SOFT}; margin-top: 6px; line-height: 1.4; }}
+.zs-arch .mix {{
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed {LINE};
+    display: flex; justify-content: space-between; font-size: 12px;
+}}
+.zs-arch .mix .t {{ color: {TREMFYA_C}; font-weight: 700; }}
+.zs-arch .mix .s {{ color: {STELARA_C}; font-weight: 700; }}
+
+/* Field */
 .zs-field {{
-    background: {CARD};
-    border: 1px solid {LINE};
-    border-radius: 3px;
-    padding: 12px 14px;
-    margin-bottom: 8px;
+    background: {CARD}; border: 1px solid {LINE}; border-radius: 3px;
+    padding: 12px 14px; margin-bottom: 8px;
 }}
 .zs-field-label {{
-    font-size: 10.5px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: {SLATE};
-    font-weight: 600;
-    margin-bottom: 4px;
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: {SLATE}; font-weight: 600; margin-bottom: 4px;
 }}
-.zs-field-value {{
-    font-size: 13.5px;
-    color: {INK};
-    line-height: 1.5;
-}}
-.zs-field-value.mono {{
-    font-family: 'Manrope', sans-serif;
-    font-size: 12.5px;
-    color: {INK_SOFT};
-}}
+.zs-field-value {{ font-size: 13.5px; color: {INK}; line-height: 1.5; }}
 
-/* ---------- Tabs ---------- */
+/* Tabs */
 div[data-baseweb="tab-list"] {{
-    gap: 0;
-    border-bottom: 1px solid {LINE};
-    background: transparent;
-    padding-left: 0;
+    gap: 0; border-bottom: 1px solid {LINE}; background: transparent; padding-left: 0;
 }}
 button[data-baseweb="tab"] {{
-    font-family: 'Manrope', sans-serif !important;
-    font-weight: 600 !important;
-    font-size: 13px !important;
-    letter-spacing: 0.02em !important;
-    color: {SLATE} !important;
-    background: transparent !important;
-    padding: 12px 22px !important;
-    border-radius: 0 !important;
-    border-bottom: 2px solid transparent !important;
-    margin-right: 2px;
+    font-family: 'Manrope', sans-serif !important; font-weight: 600 !important;
+    font-size: 13px !important; letter-spacing: 0.02em !important;
+    color: {SLATE} !important; background: transparent !important;
+    padding: 12px 22px !important; border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important; margin-right: 2px;
 }}
 button[data-baseweb="tab"]:hover {{
-    color: {INK} !important;
-    background: rgba(217, 119, 6, 0.04) !important;
+    color: {INK} !important; background: rgba(217, 119, 6, 0.04) !important;
 }}
 button[data-baseweb="tab"][aria-selected="true"] {{
-    color: {INK} !important;
-    border-bottom-color: {AMBER} !important;
-    background: transparent !important;
+    color: {INK} !important; border-bottom-color: {AMBER} !important;
 }}
-div[data-baseweb="tab-panel"] {{
-    padding-top: 18px;
-}}
+div[data-baseweb="tab-panel"] {{ padding-top: 18px; }}
 
-/* ---------- Sidebar ---------- */
+/* Sidebar */
 section[data-testid="stSidebar"] {{
     background: linear-gradient(180deg, {NAVY} 0%, #0F172A 100%);
 }}
-section[data-testid="stSidebar"] * {{
-    color: #E5E7EB !important;
-}}
+section[data-testid="stSidebar"] * {{ color: #E5E7EB !important; }}
 section[data-testid="stSidebar"] label {{
-    color: #FCD34D !important;
-    font-size: 10.5px !important;
-    letter-spacing: 0.16em !important;
-    text-transform: uppercase !important;
+    color: #FCD34D !important; font-size: 10.5px !important;
+    letter-spacing: 0.16em !important; text-transform: uppercase !important;
     font-weight: 700 !important;
 }}
 .zs-side-brand {{
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    margin-bottom: 18px;
+    padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 18px;
 }}
 .zs-side-brand .eyebrow {{
-    font-size: 10px;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: {AMBER_SOFT} !important;
-    font-weight: 700;
-    margin-bottom: 4px;
+    font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase;
+    color: {AMBER_SOFT} !important; font-weight: 700; margin-bottom: 4px;
 }}
 .zs-side-brand .title {{
     font-family: 'Fraunces', Georgia, serif !important;
-    font-size: 22px;
-    font-weight: 600;
-    color: #FFFFFF !important;
-    line-height: 1.2;
+    font-size: 22px; font-weight: 600; color: #FFFFFF !important; line-height: 1.2;
 }}
 .zs-side-brand .strap {{
-    font-size: 11.5px;
-    color: rgba(229,231,235,0.65) !important;
-    line-height: 1.4;
-    margin-top: 6px;
+    font-size: 11.5px; color: rgba(229,231,235,0.65) !important;
+    line-height: 1.4; margin-top: 6px;
 }}
-
 section[data-testid="stSidebar"] div[data-baseweb="select"] > div {{
     background-color: rgba(255,255,255,0.06) !important;
-    border-color: rgba(255,255,255,0.15) !important;
-    color: #FFFFFF !important;
+    border-color: rgba(255,255,255,0.15) !important; color: #FFFFFF !important;
 }}
 section[data-testid="stSidebar"] [data-baseweb="tag"] {{
-    background-color: {AMBER} !important;
-    color: {NAVY} !important;
+    background-color: {AMBER} !important; color: {NAVY} !important;
 }}
 section[data-testid="stSidebar"] [data-baseweb="tag"] span {{
-    color: {NAVY} !important;
-    font-weight: 700;
+    color: {NAVY} !important; font-weight: 700;
 }}
 section[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div > div {{
     background-color: {AMBER_SOFT} !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stCheckbox"] label,
-section[data-testid="stSidebar"] [data-testid="stToggle"] label {{
-    color: #E5E7EB !important;
-    text-transform: none !important;
-    letter-spacing: normal !important;
-    font-weight: 500 !important;
-    font-size: 13px !important;
-}}
-
 .zs-side-footer {{
-    margin-top: 22px;
-    padding-top: 14px;
+    margin-top: 22px; padding-top: 14px;
     border-top: 1px solid rgba(255,255,255,0.1);
-    font-size: 11px;
-    color: rgba(229,231,235,0.55) !important;
-    line-height: 1.5;
+    font-size: 11px; color: rgba(229,231,235,0.55) !important; line-height: 1.5;
 }}
 
-/* ---------- Dataframe / table ---------- */
+/* Dataframe / expander */
 [data-testid="stDataFrame"] {{
-    border: 1px solid {LINE};
-    border-radius: 3px;
-    background: {CARD};
+    border: 1px solid {LINE}; border-radius: 3px; background: {CARD};
 }}
-
-/* ---------- Expander ---------- */
 .streamlit-expanderHeader {{
-    font-family: 'Manrope', sans-serif !important;
-    font-weight: 600 !important;
-    color: {INK} !important;
-    background: {CARD} !important;
-    border: 1px solid {LINE} !important;
-    border-radius: 3px !important;
+    font-family: 'Manrope', sans-serif !important; font-weight: 600 !important;
+    color: {INK} !important; background: {CARD} !important;
+    border: 1px solid {LINE} !important; border-radius: 3px !important;
 }}
 
-/* ---------- Plotly hover tweaks ---------- */
 .js-plotly-plot .plotly .modebar {{ display: none !important; }}
 
-/* ---------- Footer ---------- */
 .zs-footer {{
-    margin-top: 56px;
-    padding-top: 16px;
-    border-top: 1px solid {LINE};
-    font-size: 11px;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    color: {SLATE};
-    display: flex;
-    justify-content: space-between;
+    margin-top: 56px; padding-top: 16px; border-top: 1px solid {LINE};
+    font-size: 11px; letter-spacing: 0.10em; text-transform: uppercase;
+    color: {SLATE}; display: flex; justify-content: space-between;
 }}
 </style>
 """
@@ -540,7 +395,6 @@ def find_local_file() -> Optional[str]:
 
 @st.cache_data(show_spinner=False)
 def load_workbook_bytes(source_bytes: bytes, _label: str = "") -> Optional[pd.DataFrame]:
-    """Read the Gold Standard sheet from raw xlsx bytes."""
     buf = io.BytesIO(source_bytes)
     try:
         return pd.read_excel(buf, sheet_name=SHEET_NAME, engine="openpyxl")
@@ -637,7 +491,6 @@ def prepare(df_raw: pd.DataFrame) -> pd.DataFrame:
         )
 
     df["Brand"] = df["Brand"].fillna("Unknown").astype(str).str.upper()
-
     df["Access Score"] = pd.to_numeric(df["Access Score"], errors="coerce")
     df["Access Tier"]  = df["Access Score"].apply(access_tier)
 
@@ -684,7 +537,6 @@ def prepare(df_raw: pd.DataFrame) -> pd.DataFrame:
 #  ANALYSIS HELPERS
 # ============================================================================
 
-# Each restriction is (column, value-meaning-restricted, display label)
 RESTRICTION_DEFS = [
     ("Step Therapy",        "Required",     "Step therapy required"),
     ("TB Test",             "Yes",          "TB test required"),
@@ -693,6 +545,13 @@ RESTRICTION_DEFS = [
     ("Phototherapy Step",   "Yes",          "Phototherapy step required"),
     ("Reauthorization",     "Required",     "Reauthorization required"),
 ]
+
+
+def restriction_count(df: pd.DataFrame) -> pd.Series:
+    s = pd.Series(0, index=df.index)
+    for col, val, _ in RESTRICTION_DEFS:
+        s = s + (df[col] == val).astype(int)
+    return s
 
 
 def restriction_share(df: pd.DataFrame) -> pd.DataFrame:
@@ -713,12 +572,19 @@ def restriction_by_brand(df: pd.DataFrame, brands: List[str]) -> pd.DataFrame:
         n = len(sub)
         for col, val, label in RESTRICTION_DEFS:
             share = (sub[col] == val).mean() if n else 0
-            rows.append({"Brand": b, "Restriction": label, "Share": share, "Count": int((sub[col] == val).sum()), "N": n})
+            rows.append({"Brand": b, "Restriction": label, "Share": share,
+                         "Count": int((sub[col] == val).sum()), "N": n})
     return pd.DataFrame(rows)
 
 
+def archetype_label(count):
+    if pd.isna(count): return "Unknown"
+    if count <= 2: return "Open access"
+    if count <= 4: return "Standard access"
+    return "Tight access"
+
+
 def kpi_card(col, label: str, value: str, foot: str = "", flavor: str = ""):
-    """Render a single KPI card inside a Streamlit column."""
     accent_cls = flavor if flavor in ("tremfya", "stelara", "neutral") else ""
     col.markdown(
         f"""
@@ -733,7 +599,7 @@ def kpi_card(col, label: str, value: str, foot: str = "", flavor: str = ""):
     )
 
 
-def observation_tile(col, tag: str, html: str, flavor: str = ""):
+def implication_tile(col, tag: str, html: str, flavor: str = ""):
     cls = "zs-obs"
     if flavor in ("tremfya", "stelara", "neutral"):
         cls += f" {flavor}"
@@ -755,7 +621,6 @@ def section_h2(title: str, deck: str = ""):
 
 
 def question(text: str):
-    """Render the consulting-style 'business question' prompt above each chart."""
     st.markdown(f'<div class="zs-question">{text}</div>', unsafe_allow_html=True)
 
 
@@ -763,13 +628,12 @@ def question(text: str):
 #  DATA INGESTION
 # ============================================================================
 
-# Sidebar branding
 st.sidebar.markdown(
-    f"""
+    """
 <div class="zs-side-brand">
   <div class="eyebrow">ZS · Market Access</div>
   <div class="title">PsO Policy Lens</div>
-  <div class="strap">Prior-authorization intelligence for the plaque-psoriasis market.</div>
+  <div class="strap">Prior-authorization intelligence: TREMFYA vs STELARA.</div>
 </div>
 """,
     unsafe_allow_html=True,
@@ -795,37 +659,33 @@ if df_raw is None:
     st.warning("Upload the gold-standard workbook from the sidebar to begin.")
     st.stop()
 
-df_all = prepare(df_raw)
+df_all_raw = prepare(df_raw)
+
+# Restrict to focus brands across the entire app
+df_focus_all = df_all_raw[df_all_raw["Brand"].isin(FOCUS_BRANDS)].copy()
 
 
 # ============================================================================
-#  SIDEBAR — Brand focus + filters
+#  SIDEBAR FILTERS
 # ============================================================================
 
-st.sidebar.markdown("**Brand focus**")
-brand_mode = st.sidebar.radio(
-    "Brand focus",
-    options=["TREMFYA + STELARA (default)", "TREMFYA only", "STELARA only", "All brands"],
+st.sidebar.markdown("**Brand lens**")
+brand_lens = st.sidebar.radio(
+    "Brand lens",
+    options=["TREMFYA + STELARA", "TREMFYA only", "STELARA only"],
     index=0,
     label_visibility="collapsed",
 )
 
-mode_to_brands = {
-    "TREMFYA + STELARA (default)": ["TREMFYA", "STELARA"],
-    "TREMFYA only":                 ["TREMFYA"],
-    "STELARA only":                 ["STELARA"],
-    "All brands":                   sorted(df_all["Brand"].unique().tolist()),
+lens_to_brands = {
+    "TREMFYA + STELARA": ["TREMFYA", "STELARA"],
+    "TREMFYA only":      ["TREMFYA"],
+    "STELARA only":      ["STELARA"],
 }
-focus_brands = mode_to_brands[brand_mode]
-
-include_context = st.sidebar.toggle(
-    "Show other brands as context",
-    value=False,
-    help="When on, charts show non-focus brands in muted gray for context.",
-)
+active_brands = lens_to_brands[brand_lens]
 
 st.sidebar.markdown("**Access score range**")
-score_lo, score_hi = int(df_all["Access Score"].min()), int(df_all["Access Score"].max())
+score_lo, score_hi = int(df_focus_all["Access Score"].min()), int(df_focus_all["Access Score"].max())
 score_range = st.sidebar.slider(
     "Access score range",
     min_value=score_lo, max_value=score_hi,
@@ -834,7 +694,7 @@ score_range = st.sidebar.slider(
 )
 
 st.sidebar.markdown("**Filter by access tier**")
-tier_options = [t for t in ACCESS_TIER_ORDER if t in df_all["Access Tier"].unique()]
+tier_options = [t for t in ACCESS_TIER_ORDER if t in df_focus_all["Access Tier"].unique()]
 selected_tiers = st.sidebar.multiselect(
     "Filter by access tier",
     options=tier_options,
@@ -845,25 +705,23 @@ selected_tiers = st.sidebar.multiselect(
 st.sidebar.markdown(
     f"""
 <div class="zs-side-footer">
-Filters apply across all sections. Brand focus controls which brands appear as the
-primary lens; toggling on "context" adds other brands as muted reference points.
+The dashboard focuses exclusively on TREMFYA and STELARA. Filters apply consistently
+across every section.
 <br><br>
-<b>{df_all["Policy ID"].nunique()}</b> policies · <b>{df_all["Brand"].nunique()}</b> brands · <b>{len(df_all)}</b> brand-policy rows
+<b>{df_focus_all["Policy ID"].nunique()}</b> policies covering one or both brands · <b>{len(df_focus_all)}</b> brand-policy observations
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-# Apply filters — build two views:
-#   df_focus: rows from focus brands only (use for primary visuals)
-#   df_context: focus + other brands, used when 'include context' is on
-base_mask = df_all["Access Score"].between(score_range[0], score_range[1]) & \
-            df_all["Access Tier"].isin(selected_tiers)
+# Apply filters
+base_mask = df_focus_all["Access Score"].between(score_range[0], score_range[1]) & \
+            df_focus_all["Access Tier"].isin(selected_tiers)
 
-df_focus   = df_all[base_mask & df_all["Brand"].isin(focus_brands)].copy()
-df_context = df_all[base_mask].copy()
+df = df_focus_all[base_mask & df_focus_all["Brand"].isin(active_brands)].copy()
+df_pair = df_focus_all[base_mask].copy()  # always both brands for paired views
 
-if df_focus.empty:
+if df.empty:
     st.warning("No rows match the current filters. Loosen them from the sidebar to continue.")
     st.stop()
 
@@ -877,11 +735,11 @@ st.markdown(
 <div class="zs-masthead">
   <div class="zs-masthead-left">
     <div class="eyebrow">Plaque Psoriasis · Market Access Intelligence</div>
-    <h1>How payers manage access to TREMFYA and STELARA</h1>
-    <div class="deck">A consultant view of prior-authorization signals extracted from {df_all['Policy ID'].nunique()} payer policy documents — quantifying restriction patterns and access differentials between the two market-leading biologics in plaque psoriasis.</div>
+    <h1>How payer policies shape access to TREMFYA and STELARA</h1>
+    <div class="deck">A consulting view of prior-authorization signals extracted from {df_focus_all['Policy ID'].nunique()} payer policies — quantifying where access opens, where it tightens, and what payer behaviors drive the difference.</div>
   </div>
   <div class="zs-masthead-right">
-    Focus brands<span class="pill">TREMFYA</span><span class="pill">STELARA</span>
+    Focus brands<span class="zs-pill-tremfya">TREMFYA</span><span class="zs-pill-stelara">STELARA</span>
   </div>
 </div>
 """,
@@ -893,11 +751,12 @@ st.markdown(
 #  TABS
 # ============================================================================
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Executive Summary",
     "Brand Comparison",
-    "Parameter-Level Insights",
-    "Policy Deep Dive",
+    "Key Drivers",
+    "Policy Insights",
+    "Policy Explorer",
 ])
 
 
@@ -906,174 +765,145 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ----------------------------------------------------------------------------
 with tab1:
 
-    # ----- KPI strip -----
-    tremfya_df = df_focus[df_focus["Brand"] == "TREMFYA"]
-    stelara_df = df_focus[df_focus["Brand"] == "STELARA"]
+    tremfya_df = df_pair[df_pair["Brand"] == "TREMFYA"]
+    stelara_df = df_pair[df_pair["Brand"] == "STELARA"]
 
-    n_policies_focus = df_focus["Policy ID"].nunique()
     tremfya_mean = tremfya_df["Access Score"].mean() if len(tremfya_df) else np.nan
     stelara_mean = stelara_df["Access Score"].mean() if len(stelara_df) else np.nan
-    overall_mean = df_focus["Access Score"].mean()
-    pct_restricted = (df_focus["Access Tier"].isin(["Highly Restrictive", "Restricted"])).mean() * 100
+    diff = tremfya_mean - stelara_mean if not (np.isnan(tremfya_mean) or np.isnan(stelara_mean)) else np.nan
 
+    # KPI strip
     c1, c2, c3, c4 = st.columns(4)
-    kpi_card(c1, "Policies in focus", f"{n_policies_focus}",
-             foot=f"Across {len(focus_brands)} brand(s), {len(df_focus)} observations", flavor="neutral")
+    kpi_card(c1, "Policies analyzed", f"{df_pair['Policy ID'].nunique()}",
+             foot=f"{len(df_pair)} brand-policy observations", flavor="neutral")
     kpi_card(c2, "TREMFYA · mean access score",
              f"{tremfya_mean:.1f}" if not np.isnan(tremfya_mean) else "—",
-             foot=f"{len(tremfya_df)} policies covered", flavor="tremfya")
+             foot=f"{len(tremfya_df)} policies covering TREMFYA", flavor="tremfya")
     kpi_card(c3, "STELARA · mean access score",
              f"{stelara_mean:.1f}" if not np.isnan(stelara_mean) else "—",
-             foot=f"{len(stelara_df)} policies covered", flavor="stelara")
-    kpi_card(c4, "Share scoring restrictive", f"{pct_restricted:.0f}<span class='unit'>%</span>",
-             foot="Policies with score ≤ 40 — material barriers to start")
+             foot=f"{len(stelara_df)} policies covering STELARA", flavor="stelara")
+    if not np.isnan(diff):
+        leader = "TREMFYA" if diff > 0 else ("STELARA" if diff < 0 else "Parity")
+        sign = "+" if diff > 0 else ""
+        flav = "tremfya" if diff > 0 else ("stelara" if diff < 0 else "neutral")
+        kpi_card(c4, "Access differential",
+                 f"{sign}{diff:.1f}<span class='unit'>pts</span>",
+                 foot=f"{leader} advantage on a 0–80 scale", flavor=flav)
+    else:
+        kpi_card(c4, "Access differential", "—", "", flavor="neutral")
 
-    # ----- Hero: access score positioning -----
+    # Verdict band
+    if not np.isnan(diff):
+        if abs(diff) < 1:
+            verdict_cls = "parity"
+            verdict_label = "Access verdict"
+            verdict_text = "TREMFYA and STELARA face statistically similar access conditions across the corpus."
+            verdict_num = f"≈ Parity"
+        elif diff > 0:
+            verdict_cls = ""
+            verdict_label = "Access leader · TREMFYA"
+            verdict_text = "TREMFYA enjoys a measurable access advantage over STELARA on a corpus-mean basis."
+            verdict_num = f"+{diff:.1f}<span class='small'> pts</span>"
+        else:
+            verdict_cls = "stelara"
+            verdict_label = "Access leader · STELARA"
+            verdict_text = "STELARA enjoys a measurable access advantage over TREMFYA on a corpus-mean basis."
+            verdict_num = f"+{abs(diff):.1f}<span class='small'> pts</span>"
+        st.markdown(
+            f"""
+<div class="zs-verdict {verdict_cls}">
+  <div>
+    <div class="label">{verdict_label}</div>
+    <div class="text">{verdict_text}</div>
+  </div>
+  <div class="number">{verdict_num}</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    # Access distribution
     section_h2(
         "Access Overview",
-        "Where every TREMFYA and STELARA policy sits on the 0–80 access spectrum. "
-        "Each dot is one policy; brand-mean markers anchor the comparison."
+        "Distribution of access scores across all in-scope policies for each brand. "
+        "Wider shapes signal more variability; the position of the mass tells the story."
     )
-    question("How does payer access differ between TREMFYA and STELARA across the policy corpus?")
+    question("Which brand sits where on the 0–80 access spectrum?")
 
-    plot_df = df_context.copy() if include_context else df_focus.copy()
-    plot_df = plot_df.dropna(subset=["Access Score"]).copy()
-    plot_df["Color group"] = plot_df["Brand"].apply(
-        lambda b: b if b in focus_brands else "Other brands"
-    )
-
-    # Build the hero strip plot
-    cat_order = focus_brands + (["Other brands"] if include_context and "Other brands" in plot_df["Color group"].values else [])
-    color_map = {b: BRAND_COLORS.get(b, OTHER_C) for b in focus_brands}
-    color_map["Other brands"] = OTHER_C
-
-    fig_hero = px.strip(
-        plot_df,
-        x="Access Score",
-        y="Color group",
-        color="Color group",
-        color_discrete_map=color_map,
-        category_orders={"Color group": cat_order},
-        hover_data={"Brand": True, "Policy #": True, "Access Score": True,
-                    "Access Tier": True, "Color group": False},
-        stripmode="overlay",
-    )
-    fig_hero.update_traces(
-        jitter=0.45,
-        marker=dict(size=13, opacity=0.85, line=dict(color="#FFFFFF", width=1)),
-    )
-
-    # Overlay brand means as crisp lines
-    for b in focus_brands:
-        bsub = plot_df[plot_df["Brand"] == b]
-        if len(bsub):
-            m = bsub["Access Score"].mean()
-            fig_hero.add_trace(go.Scatter(
-                x=[m, m],
-                y=[b, b],
-                mode="markers",
-                marker=dict(symbol="line-ns", color=INK, size=28,
-                            line=dict(width=3, color=INK)),
-                name=f"{b} mean",
-                hovertemplate=f"<b>{b} mean</b><br>%{{x:.1f}}<extra></extra>",
-                showlegend=False,
-            ))
-            fig_hero.add_annotation(
-                x=m, y=b,
-                text=f"<b>{m:.1f}</b>",
-                showarrow=False,
-                yshift=22,
-                font=dict(color=INK, size=12, family="Manrope"),
-            )
-
+    fig_dist = go.Figure()
+    for b in active_brands:
+        bsub = df[df["Brand"] == b].dropna(subset=["Access Score"])
+        if len(bsub) == 0:
+            continue
+        fig_dist.add_trace(go.Violin(
+            x=bsub["Access Score"],
+            y=[b] * len(bsub),
+            name=b,
+            orientation="h",
+            side="positive",
+            line_color=BRAND_COLORS[b],
+            fillcolor=BRAND_COLORS[b],
+            opacity=0.55,
+            box_visible=True,
+            meanline_visible=True,
+            points="all",
+            pointpos=-0.6,
+            jitter=0.25,
+            marker=dict(color=BRAND_COLORS[b], size=6, opacity=0.85,
+                        line=dict(color="#FFFFFF", width=0.5)),
+            hoveron="points",
+            hovertemplate=f"<b>{b}</b><br>Score: %{{x}}<extra></extra>",
+            scalemode="count",
+            spanmode="hard",
+        ))
     apply_layout(
-        fig_hero,
-        height=max(280, 90 * len(cat_order) + 80),
-        xaxis=dict(range=[-5, 85], title="Access Score (0 = most restrictive, 80 = most open)",
+        fig_dist,
+        height=max(300, 130 * len(active_brands) + 80),
+        xaxis=dict(range=[-5, 85],
+                   title="Access Score (0 = most restrictive, 80 = most open)",
                    title_font=dict(size=12, color=INK_SOFT)),
         yaxis=dict(title="", showgrid=False),
         showlegend=False,
+        violinmode="group",
     )
-    st.plotly_chart(fig_hero, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_dist, use_container_width=True, config={"displayModeBar": False})
 
-    # ----- Key observations -----
-    section_h2("Key Observations")
+    # Business implications
+    section_h2("Business Implications")
 
-    # Build observations dynamically from the data
-    obs_cols = st.columns(3)
+    rs = restriction_share(df_pair).sort_values("Share", ascending=False)
+    top_restr = rs.iloc[0] if len(rs) else None
 
-    if not np.isnan(tremfya_mean) and not np.isnan(stelara_mean):
-        gap = tremfya_mean - stelara_mean
-        direction = "more open" if gap > 0 else "more restricted"
-        observation_tile(
-            obs_cols[0], "Access Differential",
-            f"<b>TREMFYA scores {abs(gap):.1f} points {direction}</b> than STELARA on average "
-            f"({tremfya_mean:.0f} vs. {stelara_mean:.0f}). The gap is modest but consistent "
-            f"across the corpus.",
-            flavor="tremfya" if gap > 0 else "stelara",
+    t_range = (tremfya_df["Access Score"].max() - tremfya_df["Access Score"].min()) if len(tremfya_df) else 0
+    s_range = (stelara_df["Access Score"].max() - stelara_df["Access Score"].min()) if len(stelara_df) else 0
+
+    impl_cols = st.columns(3)
+    if not np.isnan(diff):
+        direction = "more open" if diff > 0 else ("more restricted" if diff < 0 else "comparable")
+        leader = "TREMFYA" if diff > 0 else "STELARA"
+        flav   = "tremfya" if diff > 0 else "stelara"
+        implication_tile(
+            impl_cols[0], "Brand positioning",
+            f"<b>{leader} holds a {abs(diff):.1f}-point access edge</b> across the corpus. "
+            f"While modest, the gap is directionally consistent and aligns with payers' tendency "
+            f"to apply tighter management to older entrants in the IL class.",
+            flavor=flav,
         )
-
-    # Variability story
-    if len(tremfya_df) and len(stelara_df):
-        t_range = tremfya_df["Access Score"].max() - tremfya_df["Access Score"].min()
-        s_range = stelara_df["Access Score"].max() - stelara_df["Access Score"].min()
-        observation_tile(
-            obs_cols[1], "Within-Brand Variability",
-            f"Both brands span the full restriction spectrum (TREMFYA: {t_range:.0f}-point range, "
-            f"STELARA: {s_range:.0f}-point range). <b>Payer choice drives access more than "
-            f"brand choice</b> — account-level negotiation matters.",
+    implication_tile(
+        impl_cols[1], "Payer variability",
+        f"Within-brand access varies by <b>{max(t_range, s_range):.0f} points</b> from least to most "
+        f"restrictive policy. <b>Payer choice drives access more than brand choice</b> — pull-through "
+        f"strategy should focus on lifting access at the lowest-scoring accounts.",
+        flavor="neutral",
+    )
+    if top_restr is not None:
+        implication_tile(
+            impl_cols[2], "Dominant barrier",
+            f"<b>{top_restr['Restriction']}</b> is the most prevalent utilization management lever, "
+            f"applied in <b>{top_restr['Share']*100:.0f}%</b> of policies. Negotiation effort targeted "
+            f"at this single lever could materially expand the addressable patient pool.",
             flavor="neutral",
         )
-
-    # Top restriction
-    rs = restriction_share(df_focus).sort_values("Share", ascending=False)
-    if len(rs):
-        top = rs.iloc[0]
-        observation_tile(
-            obs_cols[2], "Dominant Restriction Lever",
-            f"<b>{top['Restriction']}</b> is the most prevalent restriction — applied in "
-            f"<b>{top['Share']*100:.0f}%</b> of focus-brand policies. Reducing this single "
-            f"barrier would meaningfully expand patient access.",
-            flavor="neutral",
-        )
-
-    # ----- Restriction landscape (secondary view) -----
-    section_h2(
-        "Restriction Landscape",
-        "Frequency of each prior-authorization lever across the focus brands."
-    )
-    question("Which utilization-management levers do payers use most often?")
-
-    rb = restriction_by_brand(df_focus, focus_brands)
-    rs_overall = restriction_share(df_focus).sort_values("Share", ascending=True)
-    order = rs_overall["Restriction"].tolist()
-
-    fig_r = go.Figure()
-    for b in focus_brands:
-        sub = rb[rb["Brand"] == b].set_index("Restriction").reindex(order).reset_index()
-        fig_r.add_trace(go.Bar(
-            y=sub["Restriction"],
-            x=sub["Share"] * 100,
-            orientation="h",
-            name=b,
-            marker=dict(color=BRAND_COLORS.get(b, OTHER_C),
-                        line=dict(color="#FFFFFF", width=0.5)),
-            hovertemplate=f"<b>{b}</b><br>%{{y}}<br>%{{x:.0f}}%% of {b} policies<extra></extra>",
-            text=[f"{v*100:.0f}%" for v in sub["Share"]],
-            textposition="outside",
-            textfont=dict(size=11, color=INK),
-        ))
-    apply_layout(
-        fig_r,
-        height=max(320, 50 * len(order) + 80),
-        barmode="group",
-        xaxis=dict(range=[0, 115], ticksuffix="%",
-                   title="Share of policies imposing this restriction",
-                   title_font=dict(size=12, color=INK_SOFT)),
-        yaxis=dict(title=""),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-    )
-    st.plotly_chart(fig_r, use_container_width=True, config={"displayModeBar": False})
 
 
 # ----------------------------------------------------------------------------
@@ -1082,51 +912,52 @@ with tab1:
 with tab2:
 
     section_h2(
-        "Brand Scorecards",
-        "Side-by-side metrics for TREMFYA and STELARA across the filtered policy set."
+        "Brand Comparison",
+        "A direct comparison of TREMFYA and STELARA on access score, tier composition, "
+        "and within-policy treatment."
     )
 
-    def scorecard_metrics(sub: pd.DataFrame) -> dict:
+    # Scorecards
+    sc_cols = st.columns(2)
+    for col, brand in zip(sc_cols, FOCUS_BRANDS):
+        sub = df_focus_all[df_focus_all["Brand"] == brand]
+        sub = sub[sub["Access Score"].between(score_range[0], score_range[1])]
+        sub = sub[sub["Access Tier"].isin(selected_tiers)]
+
         if len(sub) == 0:
-            return {}
-        return {
-            "Policies covered": len(sub),
-            "Mean access score": f"{sub['Access Score'].mean():.1f}",
-            "Median access score": f"{sub['Access Score'].median():.0f}",
-            "Score range": f"{sub['Access Score'].min():.0f}–{sub['Access Score'].max():.0f}",
-            "Step therapy required": f"{(sub['Step Therapy']=='Required').mean()*100:.0f}%",
-            "TB test required": f"{(sub['TB Test']=='Yes').mean()*100:.0f}%",
-            "Quantity limit imposed": f"{(sub['Quantity Limit']=='Yes').mean()*100:.0f}%",
-            "Specialist required": f"{(sub['Specialist Required']=='Required').mean()*100:.0f}%",
+            with col:
+                st.info(f"No {brand} policies match the current filters.")
+            continue
+
+        metrics = {
+            "Policies covered":            len(sub),
+            "Mean access score":           f"{sub['Access Score'].mean():.1f}",
+            "Median access score":         f"{sub['Access Score'].median():.0f}",
+            "Score range":                 f"{sub['Access Score'].min():.0f}–{sub['Access Score'].max():.0f}",
+            "Step therapy required":       f"{(sub['Step Therapy']=='Required').mean()*100:.0f}%",
+            "TB test required":            f"{(sub['TB Test']=='Yes').mean()*100:.0f}%",
+            "Quantity limit imposed":      f"{(sub['Quantity Limit']=='Yes').mean()*100:.0f}%",
+            "Specialist required":         f"{(sub['Specialist Required']=='Required').mean()*100:.0f}%",
             "Median initial authorization": (
-                f"{sub['Initial Auth (months)'].median():.0f} mo"
+                f"{sub['Initial Auth (months)'].median():.0f} months"
                 if sub["Initial Auth (months)"].notna().any() else "—"
             ),
-            "Median reauthorization": (
-                f"{sub['Reauth (months)'].median():.0f} mo"
+            "Median reauthorization":      (
+                f"{sub['Reauth (months)'].median():.0f} months"
                 if sub["Reauth (months)"].notna().any() else "—"
             ),
         }
-
-    sc_cols = st.columns(2)
-    for col, brand in zip(sc_cols, ["TREMFYA", "STELARA"]):
-        sub = df_all[df_all["Brand"] == brand]
-        # apply other filters but always show focus brands
-        sub = sub[sub["Access Score"].between(score_range[0], score_range[1])]
-        sub = sub[sub["Access Tier"].isin(selected_tiers)]
-        m = scorecard_metrics(sub)
         css_cls = "stelara" if brand == "STELARA" else ""
         strap_cls = "stelara" if brand == "STELARA" else "tremfya"
-
         rows_html = "".join(
             f'<tr><td class="label">{k}</td><td class="value">{v}</td></tr>'
-            for k, v in m.items()
+            for k, v in metrics.items()
         )
         with col:
             st.markdown(
                 f"""
 <div class="zs-scorecard {css_cls}">
-  <div class="brand-strap strap {strap_cls}">Brand scorecard</div>
+  <div class="strap {strap_cls}">Brand scorecard</div>
   <h3>{brand}</h3>
   <table>{rows_html}</table>
 </div>
@@ -1134,179 +965,222 @@ with tab2:
                 unsafe_allow_html=True,
             )
 
-    # ----- Restriction prevalence butterfly chart -----
+    # Tier composition stacked
     section_h2(
-        "Restriction Patterns by Brand",
-        "Where the two brands face the same versus different utilization-management treatment."
+        "Access Tier Composition",
+        "Share of each brand's policies that fall into each access tier."
     )
-    question("Which restrictions hit one brand harder than the other?")
+    question("Where does each brand's policy mass concentrate on the restriction spectrum?")
 
-    rb = restriction_by_brand(df_all, ["TREMFYA", "STELARA"])
-    rb_pivot = rb.pivot(index="Restriction", columns="Brand", values="Share").reset_index()
-    rb_pivot["Gap"] = (rb_pivot.get("TREMFYA", 0) - rb_pivot.get("STELARA", 0)) * 100
-    rb_pivot = rb_pivot.sort_values("Gap")
+    tier_data = []
+    for b in FOCUS_BRANDS:
+        sub = df_pair[df_pair["Brand"] == b]
+        n = len(sub)
+        if n == 0: continue
+        vc = sub["Access Tier"].value_counts(normalize=True)
+        for t in ACCESS_TIER_ORDER:
+            tier_data.append({"Brand": b, "Tier": t, "Share": vc.get(t, 0.0)})
+    tier_df = pd.DataFrame(tier_data)
 
-    fig_bf = go.Figure()
-    fig_bf.add_trace(go.Bar(
-        y=rb_pivot["Restriction"],
-        x=-rb_pivot["STELARA"] * 100,
-        orientation="h",
-        name="STELARA",
-        marker=dict(color=STELARA_C, line=dict(color="#FFFFFF", width=0.5)),
-        text=[f"{v*100:.0f}%" for v in rb_pivot["STELARA"]],
-        textposition="outside",
-        textfont=dict(size=11, color=INK),
-        hovertemplate="<b>STELARA</b><br>%{y}<br>%{customdata:.0f}% of policies<extra></extra>",
-        customdata=rb_pivot["STELARA"] * 100,
-    ))
-    fig_bf.add_trace(go.Bar(
-        y=rb_pivot["Restriction"],
-        x=rb_pivot["TREMFYA"] * 100,
-        orientation="h",
-        name="TREMFYA",
-        marker=dict(color=TREMFYA_C, line=dict(color="#FFFFFF", width=0.5)),
-        text=[f"{v*100:.0f}%" for v in rb_pivot["TREMFYA"]],
-        textposition="outside",
-        textfont=dict(size=11, color=INK),
-        hovertemplate="<b>TREMFYA</b><br>%{y}<br>%{x:.0f}% of policies<extra></extra>",
-    ))
-    max_x = max(rb_pivot["TREMFYA"].max(), rb_pivot["STELARA"].max()) * 100 + 25
+    fig_tier = go.Figure()
+    for t in ACCESS_TIER_ORDER:
+        sub = tier_df[tier_df["Tier"] == t]
+        fig_tier.add_trace(go.Bar(
+            y=sub["Brand"],
+            x=sub["Share"] * 100,
+            orientation="h",
+            name=t,
+            marker=dict(color=ACCESS_TIER_COLOR[t], line=dict(color="#FFFFFF", width=1)),
+            hovertemplate=f"<b>{t}</b><br>%{{y}}: %{{x:.0f}}%% of policies<extra></extra>",
+        ))
     apply_layout(
-        fig_bf,
-        height=max(360, 50 * len(rb_pivot) + 80),
-        barmode="overlay",
-        xaxis=dict(
-            range=[-max_x, max_x],
-            tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
-            ticktext=["100%", "75%", "50%", "25%", "0", "25%", "50%", "75%", "100%"],
-            title="← STELARA share         |         TREMFYA share →",
-            title_font=dict(size=12, color=INK_SOFT),
-            zeroline=True,
-            zerolinecolor=INK,
-            zerolinewidth=1.5,
-        ),
+        fig_tier,
+        barmode="stack",
+        height=260,
+        xaxis=dict(range=[0, 100], ticksuffix="%",
+                   title="Share of policies", title_font=dict(size=12, color=INK_SOFT)),
         yaxis=dict(title=""),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    st.plotly_chart(fig_bf, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_tier, use_container_width=True, config={"displayModeBar": False})
 
-    # ----- Paired within-policy comparison -----
+    # Paired comparison
     section_h2(
-        "Paired Policy Comparison",
-        "When the same payer policy covers both TREMFYA and STELARA, how does the access score compare?"
+        "Paired Policy Analysis",
+        "Within the same payer policy, which brand receives the more favorable treatment?"
     )
 
-    paired = df_all[df_all["Brand"].isin(["TREMFYA", "STELARA"])].copy()
+    paired = df_focus_all.copy()
     grp = paired.groupby("Policy ID")["Brand"].nunique()
     paired_ids = grp[grp == 2].index.tolist()
-    paired = paired[paired["Policy ID"].isin(paired_ids)]
+    paired_filt = paired[paired["Policy ID"].isin(paired_ids)]
+    paired_filt = paired_filt[paired_filt["Access Score"].between(score_range[0], score_range[1])]
+    paired_filt = paired_filt[paired_filt["Access Tier"].isin(selected_tiers)]
+    pivot = paired_filt.pivot_table(index=["Policy ID", "Policy #"],
+                                     columns="Brand", values="Access Score").reset_index()
+    pivot = pivot.dropna(subset=["TREMFYA", "STELARA"])
+    pivot["delta"] = pivot["TREMFYA"] - pivot["STELARA"]
+    pivot = pivot.sort_values("delta")
 
-    if len(paired_ids) >= 2:
-        pivot = paired.pivot_table(index=["Policy ID", "Policy #"],
-                                    columns="Brand", values="Access Score").reset_index()
-        pivot = pivot.dropna(subset=["TREMFYA", "STELARA"])
-        pivot["delta"] = pivot["TREMFYA"] - pivot["STELARA"]
-        pivot = pivot.sort_values("delta")
+    if len(pivot) >= 2:
+        question(f"In the {len(pivot)} policies that cover both brands, who scores higher?")
 
-        question(f"In the {len(pivot)} policies covering both brands, which receives the better access terms?")
-
-        fig_dumb = go.Figure()
-        # Connector lines
+        fig_pair = go.Figure()
         for _, r in pivot.iterrows():
-            fig_dumb.add_trace(go.Scatter(
+            fig_pair.add_trace(go.Scatter(
                 x=[r["STELARA"], r["TREMFYA"]],
                 y=[r["Policy #"], r["Policy #"]],
                 mode="lines",
                 line=dict(color=LINE, width=2),
-                showlegend=False,
-                hoverinfo="skip",
+                showlegend=False, hoverinfo="skip", name="connector",
             ))
-        # STELARA dots
-        fig_dumb.add_trace(go.Scatter(
-            x=pivot["STELARA"], y=pivot["Policy #"],
-            mode="markers",
+        fig_pair.add_trace(go.Scatter(
+            x=pivot["STELARA"], y=pivot["Policy #"], mode="markers",
             name="STELARA",
             marker=dict(color=STELARA_C, size=14, line=dict(color="#FFFFFF", width=1.5)),
             hovertemplate="<b>STELARA</b><br>%{y}<br>Score: %{x:.0f}<extra></extra>",
         ))
-        fig_dumb.add_trace(go.Scatter(
-            x=pivot["TREMFYA"], y=pivot["Policy #"],
-            mode="markers",
+        fig_pair.add_trace(go.Scatter(
+            x=pivot["TREMFYA"], y=pivot["Policy #"], mode="markers",
             name="TREMFYA",
             marker=dict(color=TREMFYA_C, size=14, line=dict(color="#FFFFFF", width=1.5)),
             hovertemplate="<b>TREMFYA</b><br>%{y}<br>Score: %{x:.0f}<extra></extra>",
         ))
         apply_layout(
-            fig_dumb,
-            height=max(280, 35 * len(pivot) + 80),
-            xaxis=dict(range=[-5, 85],
-                       title="Access Score",
+            fig_pair,
+            height=max(280, 32 * len(pivot) + 80),
+            xaxis=dict(range=[-5, 85], title="Access Score",
                        title_font=dict(size=12, color=INK_SOFT)),
             yaxis=dict(title=""),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         )
-        st.plotly_chart(fig_dumb, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_pair, use_container_width=True, config={"displayModeBar": False})
 
-        # Summary callout
-        tremfya_higher = int((pivot["delta"] > 0).sum())
-        stelara_higher = int((pivot["delta"] < 0).sum())
-        equal = int((pivot["delta"] == 0).sum())
-        avg_delta = pivot["delta"].mean()
+        t_higher = int((pivot["delta"] > 0).sum())
+        s_higher = int((pivot["delta"] < 0).sum())
+        avg_d = pivot["delta"].mean()
 
         c1, c2, c3 = st.columns(3)
-        observation_tile(
-            c1, "TREMFYA advantage",
-            f"<b>{tremfya_higher} of {len(pivot)}</b> shared policies score TREMFYA higher than STELARA.",
-            flavor="tremfya",
-        )
-        observation_tile(
-            c2, "STELARA advantage",
-            f"<b>{stelara_higher} of {len(pivot)}</b> shared policies score STELARA higher than TREMFYA.",
-            flavor="stelara",
-        )
-        observation_tile(
-            c3, "Average within-policy gap",
-            f"Mean access-score advantage for TREMFYA: <b>{avg_delta:+.1f}</b> points within the same policy.",
-            flavor="neutral",
-        )
+        implication_tile(c1, "TREMFYA wins",
+                         f"<b>{t_higher} of {len(pivot)}</b> shared policies score TREMFYA above STELARA.",
+                         flavor="tremfya")
+        implication_tile(c2, "STELARA wins",
+                         f"<b>{s_higher} of {len(pivot)}</b> shared policies score STELARA above TREMFYA.",
+                         flavor="stelara")
+        implication_tile(c3, "Within-policy gap",
+                         f"Average within-policy advantage for TREMFYA: <b>{avg_d:+.1f}</b> points.",
+                         flavor="neutral")
     else:
-        st.info("Insufficient policies covering both brands for a paired comparison in the current filter set.")
+        st.info("Insufficient policies covering both brands for a paired comparison in the current filters.")
 
-    # ----- Authorization durations -----
+
+# ----------------------------------------------------------------------------
+#  TAB 3 — KEY DRIVERS
+# ----------------------------------------------------------------------------
+with tab3:
+
     section_h2(
-        "Authorization Durations",
-        "Length of approval windows — shorter durations mean more frequent reauthorization touchpoints."
+        "Restriction Patterns",
+        "The prior-authorization levers payers apply most often — and whether they hit one brand harder."
     )
-    question("How long is the leash on each brand?")
+    question("Which restrictions are most prevalent, and where do the brands diverge?")
+
+    rb = restriction_by_brand(df_pair, FOCUS_BRANDS)
+    overall = restriction_share(df_pair).sort_values("Share", ascending=True)
+    order = overall["Restriction"].tolist()
+
+    fig_r = go.Figure()
+    for b in FOCUS_BRANDS:
+        sub = rb[rb["Brand"] == b].set_index("Restriction").reindex(order).reset_index()
+        fig_r.add_trace(go.Bar(
+            y=sub["Restriction"],
+            x=sub["Share"] * 100,
+            orientation="h",
+            name=b,
+            marker=dict(color=BRAND_COLORS[b], line=dict(color="#FFFFFF", width=0.5)),
+            hovertemplate=f"<b>{b}</b><br>%{{y}}<br>%{{x:.0f}}%% of {b} policies<extra></extra>",
+        ))
+    apply_layout(
+        fig_r,
+        height=max(340, 56 * len(order) + 60),
+        barmode="group",
+        xaxis=dict(range=[0, 105], ticksuffix="%",
+                   title="Share of policies imposing the restriction",
+                   title_font=dict(size=12, color=INK_SOFT)),
+        yaxis=dict(title=""),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        bargap=0.18,
+    )
+    st.plotly_chart(fig_r, use_container_width=True, config={"displayModeBar": False})
+
+    # Step therapy intensity
+    section_h2(
+        "Step Therapy Intensity",
+        "Step therapy is the single most material access barrier — how many hurdles must a patient clear?"
+    )
+    question("How many therapies must a patient try before accessing each brand?")
+
+    step_rows = []
+    for b in FOCUS_BRANDS:
+        sub = df_pair[df_pair["Brand"] == b]
+        sub = sub.dropna(subset=["Total Steps"])
+        for _, r in sub.iterrows():
+            step_rows.append({"Brand": b, "Steps": int(r["Total Steps"])})
+    step_df = pd.DataFrame(step_rows)
+
+    if not step_df.empty:
+        max_s = int(step_df["Steps"].max())
+        all_steps = list(range(0, max_s + 1))
+        fig_steps = go.Figure()
+        for b in FOCUS_BRANDS:
+            sb = step_df[step_df["Brand"] == b]
+            vc = sb["Steps"].value_counts().reindex(all_steps, fill_value=0)
+            fig_steps.add_trace(go.Bar(
+                x=vc.index, y=vc.values,
+                name=b,
+                marker=dict(color=BRAND_COLORS[b], line=dict(color="#FFFFFF", width=0.5)),
+                hovertemplate=f"<b>{b}</b><br>%{{x}} steps · %{{y}} policies<extra></extra>",
+            ))
+        apply_layout(
+            fig_steps,
+            height=300,
+            barmode="group",
+            xaxis=dict(title="Total step-therapy hurdles required",
+                       title_font=dict(size=12, color=INK_SOFT), dtick=1),
+            yaxis=dict(title="Number of policies", title_font=dict(size=12, color=INK_SOFT)),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            bargap=0.25,
+        )
+        st.plotly_chart(fig_steps, use_container_width=True, config={"displayModeBar": False})
+
+    # Authorization windows
+    section_h2(
+        "Authorization Windows",
+        "Approval durations — shorter windows mean more frequent administrative touchpoints."
+    )
+    question("How long are the approval cycles for each brand?")
 
     auth_rows = []
-    for b in ["TREMFYA", "STELARA"]:
-        sub = df_all[df_all["Brand"] == b]
-        auth_rows.append({
-            "Brand": b, "Type": "Initial authorization",
-            "Median months": sub["Initial Auth (months)"].median(),
-        })
-        auth_rows.append({
-            "Brand": b, "Type": "Reauthorization",
-            "Median months": sub["Reauth (months)"].median(),
-        })
+    for b in FOCUS_BRANDS:
+        sub = df_pair[df_pair["Brand"] == b]
+        auth_rows.append({"Brand": b, "Type": "Initial authorization",
+                           "Median months": sub["Initial Auth (months)"].median()})
+        auth_rows.append({"Brand": b, "Type": "Reauthorization",
+                           "Median months": sub["Reauth (months)"].median()})
     auth_df = pd.DataFrame(auth_rows)
 
     fig_auth = go.Figure()
-    for b in ["TREMFYA", "STELARA"]:
+    for b in FOCUS_BRANDS:
         sub = auth_df[auth_df["Brand"] == b]
         fig_auth.add_trace(go.Bar(
             x=sub["Type"], y=sub["Median months"],
             name=b,
             marker=dict(color=BRAND_COLORS[b], line=dict(color="#FFFFFF", width=0.5)),
-            text=[f"{v:.0f} mo" if pd.notna(v) else "—" for v in sub["Median months"]],
-            textposition="outside",
-            textfont=dict(size=12, color=INK),
             hovertemplate=f"<b>{b}</b><br>%{{x}}<br>Median %{{y:.0f}} months<extra></extra>",
         ))
     apply_layout(
         fig_auth,
-        height=320,
+        height=300,
         barmode="group",
         xaxis=dict(title=""),
         yaxis=dict(title="Median months", title_font=dict(size=12, color=INK_SOFT)),
@@ -1315,19 +1189,12 @@ with tab2:
     )
     st.plotly_chart(fig_auth, use_container_width=True, config={"displayModeBar": False})
 
-
-# ----------------------------------------------------------------------------
-#  TAB 3 — PARAMETER-LEVEL INSIGHTS
-# ----------------------------------------------------------------------------
-with tab3:
-
+    # Interactive parameter explorer
     section_h2(
-        "Parameter-Level Insights",
-        "Interactive exploration of each extracted parameter. Select a category, then a parameter, "
-        "to see how it varies across the focus brands and what it implies for access."
+        "Parameter Explorer",
+        "Drill into any individual parameter to see how it varies between TREMFYA and STELARA."
     )
 
-    # Parameter groups
     PARAM_GROUPS = {
         "Eligibility & screening": [
             ("Age Criterion",         "categorical", "Age criterion"),
@@ -1344,223 +1211,322 @@ with tab3:
             ("Quantity Limit",       "yesno",       "Quantity limit imposed"),
             ("Initial Auth (months)","numeric",     "Initial authorization duration"),
             ("Reauth (months)",      "numeric",     "Reauthorization duration"),
-            ("Reauthorization",      "yesno",       "Reauthorization required"),
         ],
     }
 
     PARAM_INSIGHTS = {
-        "Age Criterion": "Age thresholds shape the eligible patient pool. Policies citing 'FDA approved age' default to the label, while explicit thresholds (e.g., ≥18, ≥6) may exclude pediatric or young-adult populations.",
-        "TB Test": "TB screening is a clinical safety prerequisite for biologic immunomodulators. Universal adoption would be expected; gaps indicate inconsistent policy documentation rather than waived screening.",
-        "Specialist Required": "Specialist-only prescribing concentrates approval workflow with dermatologists and rheumatologists, adding referral friction but ensuring appropriate diagnosis.",
-        "Step Therapy": "Step therapy is the single most material access barrier. Required in most policies; the depth of required step-throughs varies meaningfully by payer.",
-        "Brand Steps": "Branded biologic step-throughs (commonly anti-TNFs or preferred IL inhibitors) delay initiation by weeks to months and drive abandonment risk.",
-        "Generic Steps": "Generic / oral systemic step-throughs (methotrexate, cyclosporine, acitretin) typically apply earlier in the patient journey.",
-        "Phototherapy Step": "Phototherapy step requirements are uncommon but consequential — they require access to clinic-administered UVB/PUVA before biologic approval.",
-        "Quantity Limit": "Quantity limits cap units per fill, indirectly enforcing adherence checks and limiting off-label dose escalation.",
-        "Initial Auth (months)": "Shorter initial authorization windows (≤6 months) increase administrative friction and can trigger early discontinuation if reauthorization documentation lapses.",
-        "Reauth (months)": "Reauthorization cadence determines ongoing administrative burden. 12-month cycles are standard; shorter cycles signal tighter ongoing utilization management.",
-        "Reauthorization": "Near-universal reauthorization requirement is expected for specialty biologics — the question is duration and documentation depth, not whether it's required.",
+        "Age Criterion": "Age thresholds determine the eligible population. Policies citing 'FDA approved age' default to the label; explicit thresholds (≥6, ≥18) may carve out specific cohorts.",
+        "TB Test": "Universal TB screening is the clinical norm for biologics; gaps typically reflect documentation inconsistency rather than waived screening.",
+        "Specialist Required": "Specialist-only prescribing adds referral friction but ensures appropriate diagnosis and dosing.",
+        "Step Therapy": "Step therapy is the single most material access barrier and is required in the vast majority of policies.",
+        "Brand Steps": "Branded biologic step-throughs delay biologic initiation by weeks to months — the strongest predictor of abandonment.",
+        "Generic Steps": "Oral systemics (methotrexate, cyclosporine, acitretin) typically appear earlier in the step ladder.",
+        "Phototherapy Step": "Phototherapy step requirements are uncommon but consequential — they require clinic-administered UVB/PUVA access.",
+        "Quantity Limit": "Quantity limits cap units per fill, indirectly enforcing adherence and limiting dose escalation.",
+        "Initial Auth (months)": "Short initial windows (≤6 months) increase administrative friction and elevate early-discontinuation risk.",
+        "Reauth (months)": "Reauthorization cadence sets ongoing administrative burden — 12 months is the prevailing standard.",
     }
 
-    cat_col, param_col = st.columns([1, 2])
-    with cat_col:
-        category = st.selectbox(
-            "Parameter category",
-            options=list(PARAM_GROUPS.keys()),
-            index=0,
-        )
-    with param_col:
-        param_options = [(label, col, kind) for col, kind, label in PARAM_GROUPS[category]]
-        chosen_label = st.selectbox(
-            "Parameter",
-            options=[label for label, _, _ in param_options],
-            index=0,
-        )
-    sel = next((c, k) for label, c, k in param_options if label == chosen_label)
-    sel_col, sel_kind = sel
+    pcat_col, ppar_col = st.columns([1, 2])
+    with pcat_col:
+        category = st.selectbox("Parameter category", options=list(PARAM_GROUPS.keys()), index=0)
+    with ppar_col:
+        opts = [(label, col, kind) for col, kind, label in PARAM_GROUPS[category]]
+        chosen_label = st.selectbox("Parameter", options=[lbl for lbl, _, _ in opts], index=0)
+    sel_col, sel_kind = next((c, k) for lbl, c, k in opts if lbl == chosen_label)
 
-    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-
-    # Build the two-panel view depending on data type
-    left, right = st.columns([1, 1])
-
-    # ---- Left panel: overall distribution ----
+    left, right = st.columns(2)
     with left:
-        question(f"What does '{chosen_label}' look like across the corpus?")
+        question(f"How does '{chosen_label}' vary across the corpus?")
         if sel_kind == "numeric":
-            d = df_focus[sel_col].dropna()
+            d = df_pair[sel_col].dropna()
             if len(d) == 0:
-                st.info("No data available for this parameter under current filters.")
+                st.info("No data available for this parameter.")
             else:
                 vc = d.astype(int).value_counts().sort_index()
-                fig = go.Figure(go.Bar(
+                fig_p = go.Figure(go.Bar(
                     x=vc.index, y=vc.values,
                     marker=dict(color=AMBER, line=dict(color="#FFFFFF", width=0.5)),
-                    text=vc.values, textposition="outside",
-                    textfont=dict(size=11, color=INK),
-                    hovertemplate=f"<b>{chosen_label}</b><br>%{{x}}<br>%{{y}} policies<extra></extra>",
+                    hovertemplate=f"<b>{chosen_label}</b>: %{{x}}<br>%{{y}} policies<extra></extra>",
                     name=chosen_label,
                 ))
                 apply_layout(
-                    fig, height=300,
+                    fig_p, height=300,
                     xaxis=dict(title=chosen_label, title_font=dict(size=12, color=INK_SOFT)),
                     yaxis=dict(title="Policies", title_font=dict(size=12, color=INK_SOFT)),
-                    showlegend=False, bargap=0.25,
+                    showlegend=False, bargap=0.22,
                 )
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_p, use_container_width=True, config={"displayModeBar": False})
         else:
-            vc = df_focus[sel_col].fillna("Not specified").value_counts()
-            fig = go.Figure(go.Bar(
+            vc = df_pair[sel_col].fillna("Not specified").value_counts()
+            fig_p = go.Figure(go.Bar(
                 y=vc.index.tolist(), x=vc.values,
                 orientation="h",
                 marker=dict(color=AMBER, line=dict(color="#FFFFFF", width=0.5)),
-                text=vc.values, textposition="outside",
-                textfont=dict(size=11, color=INK),
-                hovertemplate=f"<b>{chosen_label}</b><br>%{{y}}<br>%{{x}} policies<extra></extra>",
+                hovertemplate=f"<b>{chosen_label}</b>: %{{y}}<br>%{{x}} policies<extra></extra>",
                 name=chosen_label,
             ))
             apply_layout(
-                fig, height=max(220, 50 * len(vc) + 80),
-                xaxis=dict(title="Policies", title_font=dict(size=12, color=INK_SOFT),
-                           range=[0, vc.max() * 1.2]),
+                fig_p, height=max(220, 50 * len(vc) + 80),
+                xaxis=dict(title="Policies", title_font=dict(size=12, color=INK_SOFT)),
                 yaxis=dict(title=""),
                 showlegend=False,
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_p, use_container_width=True, config={"displayModeBar": False})
 
-    # ---- Right panel: split by brand ----
     with right:
-        question(f"How does '{chosen_label}' differ between TREMFYA and STELARA?")
+        question(f"How does '{chosen_label}' differ between the two brands?")
         if sel_kind == "numeric":
-            sub = df_all[df_all["Brand"].isin(["TREMFYA", "STELARA"])].copy()
-            sub = sub[sub[sel_col].notna()]
-            sub = sub[sub["Access Score"].between(score_range[0], score_range[1])]
+            sub = df_pair.dropna(subset=[sel_col])
             if len(sub) == 0:
                 st.info("No data available for the focus brands.")
             else:
-                fig = go.Figure()
-                for b in ["TREMFYA", "STELARA"]:
+                fig_b = go.Figure()
+                for b in FOCUS_BRANDS:
                     bsub = sub[sub["Brand"] == b]
                     if len(bsub):
-                        fig.add_trace(go.Box(
+                        fig_b.add_trace(go.Box(
                             x=bsub[sel_col],
                             name=b,
                             marker=dict(color=BRAND_COLORS[b]),
                             line=dict(color=BRAND_COLORS[b]),
                             fillcolor=BRAND_COLORS[b],
-                            opacity=0.6,
-                            boxmean=True,
-                            orientation="h",
+                            opacity=0.55,
+                            boxmean=True, orientation="h",
                             hovertemplate=f"<b>{b}</b><br>%{{x}}<extra></extra>",
                         ))
                 apply_layout(
-                    fig, height=300,
+                    fig_b, height=300,
                     xaxis=dict(title=chosen_label, title_font=dict(size=12, color=INK_SOFT)),
                     yaxis=dict(title=""),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
                 )
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_b, use_container_width=True, config={"displayModeBar": False})
         else:
-            sub = df_all[df_all["Brand"].isin(["TREMFYA", "STELARA"])].copy()
+            sub = df_pair.copy()
             sub[sel_col] = sub[sel_col].fillna("Not specified")
             cross = sub.groupby(["Brand", sel_col]).size().reset_index(name="n")
             totals = sub.groupby("Brand").size()
             cross["pct"] = cross.apply(lambda r: r["n"] / totals[r["Brand"]] * 100, axis=1)
 
-            fig = go.Figure()
-            for b in ["TREMFYA", "STELARA"]:
+            fig_b = go.Figure()
+            for b in FOCUS_BRANDS:
                 bsub = cross[cross["Brand"] == b]
-                fig.add_trace(go.Bar(
+                fig_b.add_trace(go.Bar(
                     x=bsub[sel_col], y=bsub["pct"],
                     name=b,
                     marker=dict(color=BRAND_COLORS[b], line=dict(color="#FFFFFF", width=0.5)),
-                    text=[f"{v:.0f}%" for v in bsub["pct"]],
-                    textposition="outside",
-                    textfont=dict(size=11, color=INK),
-                    hovertemplate=f"<b>{b}</b><br>%{{x}}<br>%{{y:.0f}}%<extra></extra>",
+                    hovertemplate=f"<b>{b}</b><br>%{{x}}: %{{y:.0f}}%%<extra></extra>",
                 ))
             apply_layout(
-                fig, height=300, barmode="group",
+                fig_b, height=300, barmode="group",
                 xaxis=dict(title=chosen_label, title_font=dict(size=12, color=INK_SOFT)),
                 yaxis=dict(title="% of brand's policies", title_font=dict(size=12, color=INK_SOFT),
                            ticksuffix="%"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_b, use_container_width=True, config={"displayModeBar": False})
 
-    # ---- Interpretation strip ----
     interp = PARAM_INSIGHTS.get(sel_col, "")
     if interp:
         st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-        observation_tile(
-            st.container(), "Business Implication",
-            interp,
-            flavor="neutral",
-        )
-
-    # ----- Cross-parameter view (heatmap) -----
-    section_h2(
-        "Cross-Parameter Restriction Map",
-        "Brand-by-restriction map showing how often each lever is applied. Darker = more pervasive."
-    )
-
-    cross_brands = ["TREMFYA", "STELARA"]
-    if include_context:
-        # Add a couple of other brands with coverage
-        other_counts = df_all[~df_all["Brand"].isin(cross_brands)].groupby("Brand").size().sort_values(ascending=False)
-        cross_brands += other_counts[other_counts >= 2].index.tolist()[:6]
-
-    rb_full = restriction_by_brand(df_all, cross_brands)
-    pivot_h = rb_full.pivot(index="Brand", columns="Restriction", values="Share")
-    # Order brands by mean restriction share descending
-    pivot_h = pivot_h.loc[pivot_h.mean(axis=1).sort_values(ascending=False).index]
-    # Order restrictions by mean share descending
-    pivot_h = pivot_h[pivot_h.mean(axis=0).sort_values(ascending=False).index]
-
-    fig_hm = go.Figure(go.Heatmap(
-        z=pivot_h.values * 100,
-        x=pivot_h.columns,
-        y=pivot_h.index,
-        colorscale=[[0, "#FFF8E1"], [0.4, "#F9C56A"], [1, "#9A6610"]],
-        zmin=0, zmax=100,
-        text=[[f"{v:.0f}%" for v in row] for row in pivot_h.values * 100],
-        texttemplate="%{text}",
-        textfont=dict(color=INK, size=11),
-        hovertemplate="<b>%{y}</b><br>%{x}<br>%{z:.0f}% of policies<extra></extra>",
-        colorbar=dict(title=dict(text="Share", font=dict(color=INK_SOFT, size=11)),
-                      tickfont=dict(color=INK_SOFT, size=10), ticksuffix="%",
-                      thickness=12, len=0.65, x=1.02),
-    ))
-    apply_layout(
-        fig_hm,
-        height=max(260, 36 * len(pivot_h) + 130),
-        xaxis=dict(side="top", tickangle=-20, showgrid=False),
-        yaxis=dict(showgrid=False, autorange="reversed"),
-    )
-    st.plotly_chart(fig_hm, use_container_width=True, config={"displayModeBar": False})
+        implication_tile(st.container(), "Business Implication", interp, flavor="neutral")
 
 
 # ----------------------------------------------------------------------------
-#  TAB 4 — POLICY DEEP DIVE
+#  TAB 4 — POLICY INSIGHTS (VARIABILITY)
 # ----------------------------------------------------------------------------
 with tab4:
 
     section_h2(
-        "Policy Deep Dive",
-        "Brand-first navigation into the underlying policy records. Select a brand, then a policy, "
-        "to see the full extracted parameter set. Optionally compare two policies side by side."
+        "Policy Archetypes",
+        "Every policy is classified into an access archetype based on how many utilization-management "
+        "levers it imposes. The archetype mix reveals how concentrated the corpus is on the restrictive end."
     )
 
-    # Brand pill selector
-    nav_col1, nav_col2 = st.columns([1, 3])
-    with nav_col1:
-        deep_brand = st.radio(
+    df_arch = df_pair.copy()
+    df_arch["Restriction count"] = restriction_count(df_arch)
+    df_arch["Archetype"] = df_arch["Restriction count"].apply(archetype_label)
+
+    arch_summary = (df_arch.groupby("Archetype")
+                    .agg(Policies=("Policy ID", "count"),
+                         MeanScore=("Access Score", "mean"))
+                    .reindex(ARCHETYPE_ORDER).fillna(0))
+    arch_brand = (df_arch.groupby(["Archetype", "Brand"]).size()
+                  .unstack(fill_value=0).reindex(ARCHETYPE_ORDER).fillna(0))
+    arch_brand = arch_brand.reindex(columns=FOCUS_BRANDS, fill_value=0)
+
+    arch_cls = {"Open access": "open", "Standard access": "std", "Tight access": "tight"}
+    arch_desc = {
+        "Open access":     "≤ 2 utilization-management levers · most permissive policies",
+        "Standard access": "3–4 levers · the prevailing payer template",
+        "Tight access":    "≥ 5 levers · most restrictive policies in the corpus",
+    }
+
+    arch_cols = st.columns(3)
+    for col, a in zip(arch_cols, ARCHETYPE_ORDER):
+        n = int(arch_summary.loc[a, "Policies"])
+        mean_s = arch_summary.loc[a, "MeanScore"]
+        t_count = int(arch_brand.loc[a, "TREMFYA"])
+        s_count = int(arch_brand.loc[a, "STELARA"])
+        col.markdown(
+            f"""
+<div class="zs-arch {arch_cls[a]}">
+  <div class="name">{a}</div>
+  <div class="count">{n}<span class="u">policies</span></div>
+  <div class="desc">{arch_desc[a]}<br>Mean access score: <b>{mean_s:.1f}</b></div>
+  <div class="mix">
+    <span class="t">TREMFYA · {t_count}</span>
+    <span class="s">STELARA · {s_count}</span>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    # Archetype mix stacked
+    question("How is each brand's coverage distributed across access archetypes?")
+
+    arch_pct = arch_brand.div(arch_brand.sum(axis=0), axis=1).fillna(0)
+    fig_amix = go.Figure()
+    for a in ARCHETYPE_ORDER:
+        fig_amix.add_trace(go.Bar(
+            y=FOCUS_BRANDS,
+            x=arch_pct.loc[a, FOCUS_BRANDS].values * 100,
+            orientation="h",
+            name=a,
+            marker=dict(color=ARCHETYPE_COLOR[a], line=dict(color="#FFFFFF", width=1)),
+            hovertemplate=f"<b>{a}</b><br>%{{y}}: %{{x:.0f}}%% of policies<extra></extra>",
+        ))
+    apply_layout(
+        fig_amix,
+        barmode="stack",
+        height=260,
+        xaxis=dict(range=[0, 100], ticksuffix="%",
+                   title="Share of brand's policies",
+                   title_font=dict(size=12, color=INK_SOFT)),
+        yaxis=dict(title=""),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    st.plotly_chart(fig_amix, use_container_width=True, config={"displayModeBar": False})
+
+    # Variability — restriction alignment in shared policies
+    section_h2(
+        "Restriction Alignment in Shared Policies",
+        "For policies covering both brands, do payers apply the same restrictions to TREMFYA and "
+        "STELARA, or do they differentiate?"
+    )
+
+    paired = df_focus_all.copy()
+    grp = paired.groupby("Policy ID")["Brand"].nunique()
+    paired_ids = grp[grp == 2].index.tolist()
+    shared = paired[paired["Policy ID"].isin(paired_ids)]
+
+    if len(paired_ids) >= 2:
+        question(f"Across the {len(paired_ids)} shared policies, where do payers diverge between brands?")
+
+        alignment_rows = []
+        for col, val, label in RESTRICTION_DEFS:
+            both = trem_only = stel_only = neither = 0
+            for pid in paired_ids:
+                p = shared[shared["Policy ID"] == pid]
+                t_has = (p[p["Brand"] == "TREMFYA"][col] == val).any()
+                s_has = (p[p["Brand"] == "STELARA"][col] == val).any()
+                if t_has and s_has:   both += 1
+                elif t_has:            trem_only += 1
+                elif s_has:            stel_only += 1
+                else:                  neither += 1
+            total = both + trem_only + stel_only + neither
+            if total == 0: continue
+            alignment_rows.append({
+                "Restriction": label,
+                "Both brands restricted":   both / total * 100,
+                "TREMFYA only":             trem_only / total * 100,
+                "STELARA only":             stel_only / total * 100,
+                "Neither":                  neither / total * 100,
+            })
+        align_df = pd.DataFrame(alignment_rows)
+        align_df["_sort"] = align_df["Both brands restricted"] + \
+                            align_df["TREMFYA only"] + align_df["STELARA only"]
+        align_df = align_df.sort_values("_sort").drop(columns=["_sort"])
+
+        align_segments = [
+            ("Both brands restricted", "#475569"),
+            ("TREMFYA only",            TREMFYA_C),
+            ("STELARA only",            STELARA_C),
+            ("Neither",                 LINE_SOFT),
+        ]
+        fig_align = go.Figure()
+        for seg, color in align_segments:
+            fig_align.add_trace(go.Bar(
+                y=align_df["Restriction"],
+                x=align_df[seg],
+                orientation="h",
+                name=seg,
+                marker=dict(color=color, line=dict(color="#FFFFFF", width=1)),
+                hovertemplate=f"<b>{seg}</b><br>%{{y}}: %{{x:.0f}}%% of shared policies<extra></extra>",
+            ))
+        apply_layout(
+            fig_align,
+            barmode="stack",
+            height=max(280, 48 * len(align_df) + 80),
+            xaxis=dict(range=[0, 100], ticksuffix="%",
+                       title="Share of shared policies",
+                       title_font=dict(size=12, color=INK_SOFT)),
+            yaxis=dict(title=""),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        )
+        st.plotly_chart(fig_align, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("Insufficient policies covering both brands to compute alignment.")
+
+    # Variability score
+    section_h2("Business Implications")
+
+    t_std = df_focus_all[df_focus_all["Brand"] == "TREMFYA"]["Access Score"].std()
+    s_std = df_focus_all[df_focus_all["Brand"] == "STELARA"]["Access Score"].std()
+
+    impl_cols = st.columns(3)
+    tight_share = arch_summary.loc["Tight access", "Policies"] / max(arch_summary["Policies"].sum(), 1) * 100
+    implication_tile(impl_cols[0], "Restriction concentration",
+                     f"<b>{tight_share:.0f}%</b> of policies fall in the Tight Access archetype "
+                     f"(≥5 levers). The corpus is concentrated on the restrictive end — open-access "
+                     f"policies are the exception, not the rule.",
+                     flavor="neutral")
+    if not np.isnan(t_std) and not np.isnan(s_std):
+        more_var = "TREMFYA" if t_std > s_std else "STELARA"
+        implication_tile(impl_cols[1], "Access predictability",
+                         f"<b>{more_var}</b> shows greater policy-to-policy variability "
+                         f"(standard deviation: TREMFYA {t_std:.1f} vs STELARA {s_std:.1f}). "
+                         f"Plan-level access for the more variable brand is harder to predict.",
+                         flavor="tremfya" if more_var == "TREMFYA" else "stelara")
+    implication_tile(impl_cols[2], "Targeted intervention",
+                     "Focus negotiation effort on payers in the Tight Access archetype — "
+                     "moving even a subset of these to Standard Access archetype would meaningfully "
+                     "expand the addressable patient population.",
+                     flavor="neutral")
+
+
+# ----------------------------------------------------------------------------
+#  TAB 5 — POLICY EXPLORER
+# ----------------------------------------------------------------------------
+with tab5:
+
+    section_h2(
+        "Policy Explorer",
+        "Drill into individual policy records. Select a brand, then a policy, to see the full "
+        "extracted parameter set in a clean format."
+    )
+
+    nav1, nav2 = st.columns([1, 3])
+    with nav1:
+        explore_brand = st.radio(
             "Brand",
-            options=["TREMFYA", "STELARA"],
+            options=FOCUS_BRANDS,
             index=0,
             horizontal=False,
         )
-    with nav_col2:
+    with nav2:
         sort_choice = st.radio(
             "Sort policies by",
             options=["Most restrictive first", "Most open first", "Policy ID"],
@@ -1568,7 +1534,7 @@ with tab4:
             horizontal=True,
         )
 
-    sub = df_all[df_all["Brand"] == deep_brand].copy()
+    sub = df_focus_all[df_focus_all["Brand"] == explore_brand].copy()
     sub = sub[sub["Access Score"].between(score_range[0], score_range[1])]
     sub = sub[sub["Access Tier"].isin(selected_tiers)]
 
@@ -1580,56 +1546,38 @@ with tab4:
         sub = sub.sort_values("Policy ID")
 
     if len(sub) == 0:
-        st.info("No policies match the current filters for this brand.")
+        st.info(f"No {explore_brand} policies match the current filters.")
     else:
-        # Build readable labels for the selectbox
         def policy_label(row):
             score = f"{int(row['Access Score'])}" if pd.notna(row["Access Score"]) else "—"
-            return f"{row['Policy #']}  ·  Access score {score}  ·  {row['Access Tier']}"
+            return f"{row['Policy #']}  ·  Score {score}  ·  {row['Access Tier']}"
 
         sub["__label"] = sub.apply(policy_label, axis=1)
 
         st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-
         compare = st.toggle("Compare two policies side by side", value=False)
 
         if not compare:
             chosen = st.selectbox(
-                f"Select a {deep_brand} policy",
+                f"Select a {explore_brand} policy",
                 options=sub["__label"].tolist(),
                 index=0,
             )
-            row = sub[sub["__label"] == chosen].iloc[0]
-            render_policy_panels = [row]
+            panels = [sub[sub["__label"] == chosen].iloc[0]]
         else:
             cc1, cc2 = st.columns(2)
             with cc1:
-                c1 = st.selectbox(
-                    "Policy A",
-                    options=sub["__label"].tolist(),
-                    index=0,
-                    key="policy_a",
-                )
+                c1 = st.selectbox("Policy A", options=sub["__label"].tolist(), index=0, key="pa")
             with cc2:
-                default_b = 1 if len(sub) > 1 else 0
-                c2 = st.selectbox(
-                    "Policy B",
-                    options=sub["__label"].tolist(),
-                    index=default_b,
-                    key="policy_b",
-                )
-            render_policy_panels = [
-                sub[sub["__label"] == c1].iloc[0],
-                sub[sub["__label"] == c2].iloc[0],
-            ]
+                idx_b = 1 if len(sub) > 1 else 0
+                c2 = st.selectbox("Policy B", options=sub["__label"].tolist(), index=idx_b, key="pb")
+            panels = [sub[sub["__label"] == c1].iloc[0], sub[sub["__label"] == c2].iloc[0]]
 
         st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
 
-        cols_panel = st.columns(len(render_policy_panels), gap="medium")
-
-        for panel_col, row in zip(cols_panel, render_policy_panels):
+        cols_panel = st.columns(len(panels), gap="medium")
+        for panel_col, row in zip(cols_panel, panels):
             with panel_col:
-                # Header card
                 score = int(row["Access Score"]) if pd.notna(row["Access Score"]) else None
                 tier = row["Access Tier"]
                 tier_color = ACCESS_TIER_COLOR.get(tier, SLATE)
@@ -1644,26 +1592,28 @@ with tab4:
               color:{brand_color}; font-weight:700;">{row['Brand']} · {row['Policy #']}</div>
   <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
     <div>
-      <div style="font-family:'Fraunces',serif; font-size:32px; font-weight:600; color:{INK}; line-height:1;">{score_html}<span style="font-size:14px; color:{SLATE}; font-family:Manrope; margin-left:6px;">/ 80</span></div>
-      <div style="font-size:11px; color:{SLATE}; margin-top:4px; letter-spacing:0.08em; text-transform:uppercase; font-weight:600;">Access score</div>
+      <div style="font-family:'Fraunces',serif; font-size:32px; font-weight:600;
+                  color:{INK}; line-height:1;">{score_html}<span style="font-size:14px;
+                  color:{SLATE}; font-family:Manrope; margin-left:6px;">/ 80</span></div>
+      <div style="font-size:11px; color:{SLATE}; margin-top:4px; letter-spacing:0.08em;
+                  text-transform:uppercase; font-weight:600;">Access score</div>
     </div>
     <div style="background:{tier_color}; color:#FFFFFF; padding:5px 12px; border-radius:2px;
-                font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">{tier}</div>
+                font-size:11px; font-weight:700; letter-spacing:0.08em;
+                text-transform:uppercase;">{tier}</div>
   </div>
 </div>
 """,
                     unsafe_allow_html=True,
                 )
 
-                # Parameter fields
-                def field(label, value, mono=False):
+                def field_html(label, value):
                     if pd.isna(value) or str(value).strip() in ("", "nan", "None"):
                         value = "—"
-                    cls = "zs-field-value mono" if mono else "zs-field-value"
                     return f"""
 <div class="zs-field">
   <div class="zs-field-label">{label}</div>
-  <div class="{cls}">{value}</div>
+  <div class="zs-field-value">{value}</div>
 </div>
 """
 
@@ -1674,26 +1624,25 @@ with tab4:
                           if pd.notna(row['Reauth (months)']) else
                           str(row.get('Reauthorization Duration(in-months)') or '—'))
 
-                fields_html = "".join([
-                    field("Age criterion", row["Age Criterion"]),
-                    field("Specialist", row["Specialist Detail"]),
-                    field("Step therapy", row["Step Therapy"]),
-                    field("Brand steps required",
-                          f"{int(row['Brand Steps'])}" if pd.notna(row['Brand Steps']) else "—"),
-                    field("Generic steps required",
-                          f"{int(row['Generic Steps'])}" if pd.notna(row['Generic Steps']) else "—"),
-                    field("Phototherapy step", row["Phototherapy Step"]),
-                    field("TB test", row["TB Test"]),
-                    field("Quantity limit", row["Quantity Limit"]),
-                    field("Initial authorization", init_auth),
-                    field("Reauthorization duration", reauth),
+                fields = "".join([
+                    field_html("Age criterion", row["Age Criterion"]),
+                    field_html("Specialist", row["Specialist Detail"]),
+                    field_html("Step therapy", row["Step Therapy"]),
+                    field_html("Brand-step requirements",
+                               f"{int(row['Brand Steps'])}" if pd.notna(row['Brand Steps']) else "—"),
+                    field_html("Generic-step requirements",
+                               f"{int(row['Generic Steps'])}" if pd.notna(row['Generic Steps']) else "—"),
+                    field_html("Phototherapy step", row["Phototherapy Step"]),
+                    field_html("TB test", row["TB Test"]),
+                    field_html("Quantity limit", row["Quantity Limit"]),
+                    field_html("Initial authorization", init_auth),
+                    field_html("Reauthorization duration", reauth),
                 ])
-                st.markdown(fields_html, unsafe_allow_html=True)
+                st.markdown(fields, unsafe_allow_html=True)
 
-                # Policy language expanders
-                step_text = row.get("Step Therapy Requirements Documented in Policy")
+                step_text   = row.get("Step Therapy Requirements Documented in Policy")
                 reauth_text = row.get("Reauthorization Requirements Documented in Policy")
-                qty_text = row.get("Quantity Limits")
+                qty_text    = row.get("Quantity Limits")
 
                 if pd.notna(step_text) and str(step_text).strip().lower() not in ("no", "nan", ""):
                     with st.expander("Step therapy language (verbatim)"):
@@ -1716,7 +1665,7 @@ st.markdown(
     f"""
 <div class="zs-footer">
   <span>ZS · Market Access Practice · Plaque Psoriasis Policy Lens</span>
-  <span>Generated from extracted PA policy corpus · {df_all['Policy ID'].nunique()} policies, {df_all['Brand'].nunique()} brands</span>
+  <span>{df_focus_all['Policy ID'].nunique()} policies analyzed · TREMFYA & STELARA in focus</span>
 </div>
 """,
     unsafe_allow_html=True,
